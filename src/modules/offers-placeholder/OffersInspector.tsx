@@ -1,0 +1,2 @@
+import type { OffersConfig } from './schema';
+export function OffersInspector({config:c,onChange}:{config:OffersConfig;onChange:(c:OffersConfig)=>void}){return <div className="inspector-form"><label>Название<input value={c.title} onChange={e=>onChange({...c,title:e.target.value})}/></label><label>Текст пустого состояния<textarea value={c.emptyText} onChange={e=>onChange({...c,emptyText:e.target.value})}/></label><p className="hint">Полноценные Offers появятся в следующей итерации. Сейчас модуль подтверждает расширяемость registry.</p></div>}
