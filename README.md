@@ -21,6 +21,7 @@ Vite использует относительный `base`, поэтому со
 ## Архитектура
 
 - `src/project/` — Zod schema, Project store, draft/published operations, repository и legacy migration.
+- `src/project/validation/` — registry-aware runtime validation; повреждённая известная entity восстанавливается отдельно, а неизвестные future types сохраняются.
 - `src/app/editorStore.ts` — только UI-состояние конструктора: route, selection, sheet, preview source/device.
 - `src/modules/` — customer-модули и `moduleRegistry`; preview и inspector выбираются registry, а не `if/else` в Builder.
 - `src/tools/` — отдельный registry бизнес-инструментов; QR Sales не входит в `modules[]`.
@@ -44,6 +45,8 @@ Vite использует относительный `base`, поэтому со
 **Новый guard:** создайте schema/defaults/settings и опциональный preview в `src/guards/<guard>`, затем добавьте definition в `src/guards/registry.ts`. Текущий shape уже различает app/module scope, но сложного rule engine намеренно нет.
 
 **Новый template:** добавьте `TemplateBlueprint` в `src/templates/registry.ts`. Blueprint создаёт новый Project с собственными modules/tools/guards, а не патчит название существующего паспорта.
+
+Применение template к существующему проекту меняет только draft-структуру. `project.id` и предыдущий `published` snapshot сохраняются, а `draftRevision` увеличивается на единицу.
 
 ## Persistence и migration
 
