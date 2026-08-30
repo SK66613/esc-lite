@@ -1,0 +1,9 @@
+import type { ComponentType } from 'react';import type { LucideIcon } from 'lucide-react';import { CreditCard, Tags } from 'lucide-react';
+import { LoyaltyPassportConfigSchema,createLoyaltyConfig } from './loyalty-passport/schema';import { LoyaltyPassportPreview } from './loyalty-passport/LoyaltyPassportPreview';import { LoyaltyPassportInspector } from './loyalty-passport/LoyaltyPassportInspector';
+import { OffersConfigSchema,createOffersConfig } from './offers-placeholder/schema';import { OffersPreview } from './offers-placeholder/OffersPreview';import { OffersInspector } from './offers-placeholder/OffersInspector';
+import type { ZodType } from 'zod';
+type InspectorProps={config:unknown;onChange:(config:never)=>void};
+export type ModuleDefinition={type:string;title:string;description:string;icon:LucideIcon;version:number;createDefaultConfig:()=>unknown;ConfigSchema:ZodType;PreviewComponent:ComponentType<{config:unknown}>;InspectorComponent:ComponentType<InspectorProps>};
+export const moduleRegistry={loyalty_passport:{type:'loyalty_passport',title:'Loyalty Passport',description:'Визиты, прогресс и награда',icon:CreditCard,version:1,createDefaultConfig:createLoyaltyConfig,ConfigSchema:LoyaltyPassportConfigSchema,PreviewComponent:LoyaltyPassportPreview,InspectorComponent:LoyaltyPassportInspector as ComponentType<InspectorProps>},offers_placeholder:{type:'offers_placeholder',title:'Offers',description:'Foundation для предложений',icon:Tags,version:1,createDefaultConfig:createOffersConfig,ConfigSchema:OffersConfigSchema,PreviewComponent:OffersPreview,InspectorComponent:OffersInspector as ComponentType<InspectorProps>}} satisfies Record<string,ModuleDefinition>;
+export type ModuleType=keyof typeof moduleRegistry;
+export const isModuleType=(value:string):value is ModuleType=>value in moduleRegistry;

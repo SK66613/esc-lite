@@ -1,0 +1,9 @@
+import { create } from 'zustand';
+import type { ModuleInstance, Project } from './schema';
+import { projectRepository } from './repository';
+import { publishProject, reorderModules } from './operations';
+import { createId } from './id';
+import { moduleRegistry, type ModuleType } from '../modules/registry';
+type ProjectStore={project:Project;mutate:(fn:(p:Project)=>Project)=>void;replace:(p:Project)=>void;updateModule:(id:string,patch:Partial<ModuleInstance>)=>void;addModule:(type:ModuleType)=>void;deleteModule:(id:string)=>void;reorder:(active:string,over:string)=>void;publish:()=>void;reset:()=>void};
+const persist=(project:Project)=>{projectRepository.saveProject(project);return project};
+export const useProjectStore=create<ProjectStore>((set)=>({project:projectRepository.loadProject(),mutate:fn=>set(s=>({project:persist({...fn(structuredClone(s.project)),draftRevision:s.project.draftRevision+1,published:s.project.published})})),replace:project=>set({project:persist(project)}),updateModule:(id,patch)=>set(s=>({project:persist({...s.project,modules:s.project.modules.map(m=>m.id===id?{...m,...patch}:m),draftRevision:s.project.draftRevision+1})})),addModule:type=>set(s=>{const definition=moduleRegistry[type];const order=s.project.modules.length;return {project:persist({...s.project,modules:[...s.project.modules,{id:createId(type),type,version:definition.version,enabled:true,order,config:definition.createDefaultConfig()}],draftRevision:s.project.draftRevision+1})}}),deleteModule:id=>set(s=>({project:persist({...s.project,modules:s.project.modules.filter(m=>m.id!==id).map((m,order)=>({...m,order})),draftRevision:s.project.draftRevision+1})})),reorder:(active,over)=>set(s=>({project:persist({...s.project,modules:reorderModules(s.project.modules,active,over),draftRevision:s.project.draftRevision+1})})),publish:()=>set(s=>({project:persist(publishProject(s.project))})),reset:()=>set({project:projectRepository.resetProject()})}));

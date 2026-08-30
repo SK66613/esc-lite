@@ -1,0 +1,4 @@
+import type { ModuleInstance, Project, ProjectSnapshot } from './schema';
+export const snapshotProject=(project:Project):ProjectSnapshot=>{const {published:_,...snapshot}=project;return structuredClone(snapshot)};
+export const publishProject=(project:Project,now=new Date()):Project=>({...project,published:{revision:project.draftRevision,publishedAt:now.toISOString(),snapshot:snapshotProject(project)}});
+export const reorderModules=(modules:ModuleInstance[],activeId:string,overId:string):ModuleInstance[]=>{const sorted=[...modules].sort((a,b)=>a.order-b.order);const from=sorted.findIndex(x=>x.id===activeId),to=sorted.findIndex(x=>x.id===overId);if(from<0||to<0||from===to)return modules;const [moved]=sorted.splice(from,1);sorted.splice(to,0,moved);return sorted.map((module,order)=>({...module,order}));};

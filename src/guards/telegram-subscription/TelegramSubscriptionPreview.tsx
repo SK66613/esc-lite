@@ -1,0 +1,2 @@
+import { LockKeyhole } from 'lucide-react';import { TelegramSubscriptionConfigSchema } from './schema';
+export function TelegramSubscriptionPreview({config}:{config:unknown}){const c=TelegramSubscriptionConfigSchema.parse(config);return <div className="gate-preview"><LockKeyhole/><h3>Доступ закрыт</h3><p>{c.screenText}</p><button>Подписаться на {c.channel}</button><small>Проверить снова</small></div>}
