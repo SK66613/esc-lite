@@ -130,7 +130,8 @@ export function applyAIPlan(current: Project, rawPlan: unknown): Project {
   const working = structuredClone(current);
   for (const rawAction of plan.actions) applyAction(working, rawAction);
   const validated = validateProjectRuntime(working).project;
-  if (JSON.stringify(validated) === JSON.stringify(current)) return current;
+  const normalizedCurrent = validateProjectRuntime(current).project;
+  if (JSON.stringify(validated) === JSON.stringify(normalizedCurrent)) return current;
   validated.draftRevision = current.draftRevision + 1;
   return validateProjectRuntime(validated).project;
 }
