@@ -20,7 +20,10 @@ interface TypedModuleDefinition<TSchema extends ZodTypeAny> {
   ConfigSchema: TSchema;
   PreviewComponent: ComponentType<ModuleViewProps<output<TSchema>>>;
   InspectorComponent: ComponentType<ModuleInspectorProps<output<TSchema>>>;
+  ai?: ModuleAIMetadata;
 }
+
+export interface ModuleAIMetadata { purpose: string; examples?: string[]; keywords?: string[] }
 
 export interface ModuleDefinition {
   type: string; title: string; description: string; icon: LucideIcon; version: number;
@@ -28,6 +31,7 @@ export interface ModuleDefinition {
   ConfigSchema: ZodTypeAny;
   PreviewComponent: ComponentType<ModuleViewProps<unknown>>;
   InspectorComponent: ComponentType<ModuleInspectorProps<unknown>>;
+  ai?: ModuleAIMetadata;
 }
 
 /** The single controlled type-erasure boundary for this heterogeneous registry. */
@@ -52,12 +56,14 @@ export const moduleRegistry = {
     description: 'Визиты, прогресс и награда', icon: CreditCard, version: 1,
     createDefaultConfig: createLoyaltyConfig, ConfigSchema: LoyaltyPassportConfigSchema,
     PreviewComponent: LoyaltyPassportPreview, InspectorComponent: LoyaltyPassportInspector,
+    ai:{purpose:'Программа лояльности по визитам или покупкам',examples:['Каждый шестой кофе бесплатно'],keywords:['бонус','лояльность','кофе в подарок','штампы','визиты']},
   }),
   offers_placeholder: defineModule({
     type: 'offers_placeholder', title: 'Offers',
     description: 'Foundation для предложений', icon: Tags, version: 1,
     createDefaultConfig: createOffersConfig, ConfigSchema: OffersConfigSchema,
     PreviewComponent: OffersPreview, InspectorComponent: OffersInspector,
+    ai:{purpose:'Акции и специальные предложения',keywords:['акции','скидки','предложения']},
   }),
 } satisfies Record<string, ModuleDefinition>;
 
