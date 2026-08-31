@@ -4,6 +4,7 @@ import type { GuardInstance, Project, ToolInstance } from './schema';
 import { applyProjectBlueprint, publishProject, reorderProjectModules, updateProjectModuleConfig } from './operations';
 import { createId } from './id';
 import { moduleRegistry, type ModuleType } from '../modules/registry';
+import { applyAIPlan as executeAIPlan } from '../ai/executor/applyAIPlan';
 
 type ProjectDetails = Pick<Project, 'metadata' | 'theme'>;
 interface ProjectStore {
@@ -18,9 +19,10 @@ interface ProjectStore {
   reorderModules: (active: string, over: string) => void;
   updateTool: (tool: ToolInstance) => void;
   updateGuard: (guard: GuardInstance) => void;
+  applyAIPlan: (plan: unknown) => { ok: boolean; changed: boolean; error?: string };
+  restoreDraft: (snapshot: Project) => void;
   publish: () => void;
   reset: () => void;
-  replaceProject: (project: Project) => void;
 }
 
 const save = (project: Project) => { projectRepository.saveProject(project); return project; };
@@ -79,7 +81,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     guards: state.project.guards.map((item) => item.id === guard.id ? guard : item),
     draftRevision: state.project.draftRevision + 1,
   }) })),
+  applyAIPlan: (plan) => {
+    const current = get().project;
+    try {
+      const next = executeAIPlan(current, plan);
+      const changed = next !== current;
+      if (changed) set({ project: save(next) });
+      return { ok: true, changed };
+    } catch (error) {
+      return { ok: false, changed: false, error: error instanceof Error ? error.message : 'Invalid AI plan' };
+    }
+  },
+  restoreDraft: (snapshot) => set((state) => ({ project: save({
+    ...state.project,
+    metadata: structuredClone(snapshot.metadata),
+    theme: structuredClone(snapshot.theme),
+    navigation: structuredClone(snapshot.navigation),
+    modules: structuredClone(snapshot.modules),
+    guards: structuredClone(snapshot.guards),
+    tools: structuredClone(snapshot.tools),
+    draftRevision: state.project.draftRevision + 1,
+  }) })),
   publish: () => set((state) => ({ project: save(publishProject(state.project)) })),
   reset: () => set({ project: projectRepository.resetProject() }),
-  replaceProject: (project) => set({ project: save(project) }),
 }));
