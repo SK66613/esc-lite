@@ -20,6 +20,7 @@ interface ProjectStore {
   updateGuard: (guard: GuardInstance) => void;
   publish: () => void;
   reset: () => void;
+  replaceProject: (project: Project) => void;
 }
 
 const save = (project: Project) => { projectRepository.saveProject(project); return project; };
@@ -80,4 +81,5 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   }) })),
   publish: () => set((state) => ({ project: save(publishProject(state.project)) })),
   reset: () => set({ project: projectRepository.resetProject() }),
+  replaceProject: (project) => set({ project: save(project) }),
 }));
