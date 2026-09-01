@@ -85,3 +85,10 @@ describe('passport presentation', () => {
     },
   );
 });
+
+import {PASSPORT_VISUAL_VARIANTS} from './options';
+import {buildPassportPresentationAICapabilities} from './registry';
+describe('presentation AI vocabulary',()=>{
+ it('keeps registry ids equal to pure options',()=>expect(passportPresentationRegistry.map(x=>x.id)).toEqual([...PASSPORT_VISUAL_VARIANTS]));
+ it('projects JSON-safe metadata without renderers',()=>{const projection=buildPassportPresentationAICapabilities();expect(projection).toHaveLength(5);expect(JSON.stringify(projection)).not.toContain('Renderer');expect(projection.find(x=>x.id==='minimal_counter')?.supports).toEqual(['progressMode']);});
+});

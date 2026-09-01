@@ -5,7 +5,7 @@ import type { output, ZodTypeAny } from 'zod';
 import { LoyaltyPassportConfigSchema, createLoyaltyConfig } from './loyalty-passport/schema';
 import { LoyaltyPassportPreview } from './loyalty-passport/LoyaltyPassportPreview';
 import { LoyaltyPassportInspector } from './loyalty-passport/LoyaltyPassportInspector';
-import { passportPresentationConfigOptions } from './loyalty-passport/presentation/registry';
+import { buildPassportPresentationAICapabilities, passportPresentationConfigOptions } from './loyalty-passport/presentation/registry';
 import { OffersConfigSchema, createOffersConfig } from './offers-placeholder/schema';
 import { OffersPreview } from './offers-placeholder/OffersPreview';
 import { OffersInspector } from './offers-placeholder/OffersInspector';
@@ -25,7 +25,8 @@ interface TypedModuleDefinition<TSchema extends ZodTypeAny> {
 }
 
 export interface ModuleAIConfigOption { values: readonly (string|number|boolean)[]; description?:string }
-export interface ModuleAIMetadata { purpose: string; examples?: string[]; keywords?: string[]; configOptions?:Record<string,ModuleAIConfigOption> }
+export interface ModuleAIPresentationVariant { id:string;title:string;description:string;purpose?:string;keywords?:readonly string[];bestFor?:readonly string[];supports:readonly string[] }
+export interface ModuleAIMetadata { purpose: string; examples?: string[]; keywords?: string[]; configOptions?:Record<string,ModuleAIConfigOption>;presentationVariants?:readonly ModuleAIPresentationVariant[] }
 
 export interface ModuleDefinition {
   type: string; title: string; description: string; icon: LucideIcon; version: number;
@@ -58,7 +59,7 @@ export const moduleRegistry = {
     description: 'Визиты, прогресс и награда', icon: CreditCard, version: 1,
     createDefaultConfig: createLoyaltyConfig, ConfigSchema: LoyaltyPassportConfigSchema,
     PreviewComponent: LoyaltyPassportPreview, InspectorComponent: LoyaltyPassportInspector,
-    ai:{purpose:'Программа лояльности по визитам или покупкам',examples:['Каждый шестой кофе бесплатно'],keywords:['бонус','лояльность','кофе в подарок','штампы','визиты'],configOptions:passportPresentationConfigOptions},
+    ai:{purpose:'Программа лояльности по визитам или покупкам',examples:['Каждый шестой кофе бесплатно'],keywords:['бонус','лояльность','кофе в подарок','штампы','визиты'],configOptions:passportPresentationConfigOptions,presentationVariants:buildPassportPresentationAICapabilities()},
   }),
   offers_placeholder: defineModule({
     type: 'offers_placeholder', title: 'Offers',

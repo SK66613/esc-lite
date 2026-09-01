@@ -4,6 +4,7 @@ import { AIPlannerRequestSchema, type AIPlannerRequest, type ValidatedCapability
 import { AI_COMPOSER_SYSTEM_PROMPT } from '../src/ai/prompts/systemPrompt';
 import { AI_PLAN_JSON_SCHEMA } from './aiPlanJsonSchema';
 import { SERVER_ALLOWED_CAPABILITY_IDS } from '../src/ai/capabilities/allowedCapabilityIds';
+import { SERVER_MODULE_CONFIG_OPTION_POLICY } from '../src/ai/capabilities/serverConfigOptionPolicy';
 
 export const DEFAULT_AI_MODEL = 'gpt-5.6-terra';
 
@@ -54,7 +55,18 @@ export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: Vali
     if ('moduleType' in action.payload) {
       const capability = modules.get(action.payload.moduleType);
       if (!capability) throw new AIServiceError('AI_INVALID_PLAN', 502, `AI предложил недоступный модуль: ${action.payload.moduleType}`);
-      if (action.type === 'patch_module_config') assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
+      if (action.type === 'patch_module_config') {
+        assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
+        const policy=SERVER_MODULE_CONFIG_OPTION_POLICY[action.payload.moduleType as keyof typeof SERVER_MODULE_CONFIG_OPTION_POLICY];
+        if(policy&&'presentation' in action.payload.patch){
+          const presentation=action.payload.patch.presentation;
+          if(!presentation||typeof presentation!=='object'||Array.isArray(presentation)) throw new AIServiceError('AI_INVALID_PLAN',502,'AI предложил некорректную presentation настройку');
+          for(const [axis,value] of Object.entries(presentation as Record<string,unknown>)){
+            const path=`presentation.${axis}` as keyof typeof policy; const allowed=policy[path];
+            if(!allowed||(allowed as readonly unknown[]).includes(value)===false) throw new AIServiceError('AI_INVALID_PLAN',502,`AI предложил недопустимую настройку ${path}`);
+          }
+        }
+      }
     }
     if ('toolType' in action.payload) {
       const capability = tools.get(action.payload.toolType);

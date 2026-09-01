@@ -1,17 +1,18 @@
 import { z } from 'zod';
+import { PASSPORT_COLUMNS, PASSPORT_HEADER_MODES, PASSPORT_IMAGE_ASPECTS, PASSPORT_PROGRESS_MODES, PASSPORT_STAMP_SHAPES, PASSPORT_VISUAL_VARIANTS } from './presentation/options';
 
-export const PassportVisualVariantSchema = z.enum(['classic_grid','punch_card','journey_path','collection_gallery','minimal_counter']);
-export const PassportHeaderModeSchema = z.enum(['compact','standard','hero']);
-export const PassportStampShapeSchema = z.enum(['circle','rounded','square']);
-export const PassportProgressModeSchema = z.enum(['bar','counter','ring','hidden']);
-export const PassportImageAspectSchema = z.enum(['square','portrait','landscape']);
+export const PassportVisualVariantSchema = z.enum(PASSPORT_VISUAL_VARIANTS);
+export const PassportHeaderModeSchema = z.enum(PASSPORT_HEADER_MODES);
+export const PassportStampShapeSchema = z.enum(PASSPORT_STAMP_SHAPES);
+export const PassportProgressModeSchema = z.enum(PASSPORT_PROGRESS_MODES);
+export const PassportImageAspectSchema = z.enum(PASSPORT_IMAGE_ASPECTS);
 
 export const LoyaltyPassportPresentationSchema = z.object({
   visualVariant: PassportVisualVariantSchema.default('classic_grid'),
   headerMode: PassportHeaderModeSchema.default('standard'),
   stampShape: PassportStampShapeSchema.default('circle'),
   progressMode: PassportProgressModeSchema.default('bar'),
-  columns: z.union([z.literal(2),z.literal(3),z.literal(4)]).default(3),
+  columns: z.union(PASSPORT_COLUMNS.map(value=>z.literal(value)) as [z.ZodLiteral<2>,z.ZodLiteral<3>,z.ZodLiteral<4>]).default(3),
   imageAspect: PassportImageAspectSchema.default('square'),
 }).default({});
 
