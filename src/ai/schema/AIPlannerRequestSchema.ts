@@ -36,10 +36,20 @@ export const CapabilityManifestSchema = z.object({
   templates: z.array(TemplateCapabilitySchema).max(100),
 }).strict();
 
+export const MAX_CONVERSATION_TURNS = 8;
+export const MAX_CONVERSATION_CHARS = 6000;
+export const MAX_CONVERSATION_TURN_CHARS = 1500;
+export const AIConversationTurnSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(MAX_CONVERSATION_TURN_CHARS),
+}).strict();
+
 export const AIPlannerRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
   project: ProjectSchema,
   capabilities: CapabilityManifestSchema,
+  conversation: z.array(AIConversationTurnSchema).max(MAX_CONVERSATION_TURNS).optional()
+    .refine((turns) => !turns || turns.reduce((sum, turn) => sum + turn.content.length, 0) <= MAX_CONVERSATION_CHARS, 'Conversation is too long'),
 }).strict();
 
 export type AIPlannerRequest = z.infer<typeof AIPlannerRequestSchema>;

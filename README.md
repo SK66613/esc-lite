@@ -16,6 +16,26 @@ npm run build
 npm run test
 ```
 
+## Production AI и Telegram
+
+Production `RemoteAIPlanner` отправляет подписанную строку Telegram Mini App в заголовке
+`X-Telegram-Init-Data`; она не попадает в JSON запроса или AI prompt. Worker проверяет HMAC,
+`auth_date` (TTL 24 часа) и только после этого использует Telegram user id для rate limiting.
+Локальный `npm run dev` по умолчанию продолжает использовать `MockAIPlanner`.
+
+Настройте секреты только как Cloudflare Worker secrets (не как `VITE_*` переменные):
+
+```bash
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put TELEGRAM_BOT_TOKEN
+```
+
+Опциональный `OPENAI_MODEL` задаёт модель. `GET /api/health` сообщает только факт настройки AI
+и Telegram authentication и не вызывает OpenAI. In-memory rate limiter является MVP-ограничением:
+его состояние не разделяется между Worker isolates; долговременной истории чата и backend publish нет.
+Client Capability Manifest валидируется против компактного Worker-safe allowlist; при добавлении registry
+capability этот список нужно обновить. Это временная основа до общего server-owned каталога capabilities.
+
 Vite использует относительный `base`, поэтому содержимое `dist/` можно разместить на статическом hosting без backend routes.
 
 ## Архитектура
@@ -54,7 +74,7 @@ Vite использует относительный `base`, поэтому со
 
 ## Текущие mock-ограничения
 
-- Нет backend, API, auth, базы данных или Telegram SDK/initData.
+- Нет базы данных или пользовательских аккаунтов; production AI использует проверенный Telegram initData.
 - Publish и QR scan полностью локальные; QR не содержит криптографии.
 - Проверка подписки и статус бота — интерактивный mock без Telegram API.
 - Offers — placeholder, доказывающий multi-module registry. Shop и Booking намеренно не реализованы.

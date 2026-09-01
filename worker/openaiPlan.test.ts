@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultProject } from '../src/project/defaults';
 import { buildCapabilityManifest } from '../src/ai/capabilities/buildCapabilityManifest';
-import { AIServiceError, createOpenAIPlan, extractOpenAIOutputText } from './openaiPlan';
+import { AIServiceError, createOpenAIPlan, extractOpenAIOutputText, validatePlanRisk } from './openaiPlan';
 
 const request = (message='Поменяй название') => ({ message, project:createDefaultProject(), capabilities:buildCapabilityManifest() });
 const modelPlan = (actions: unknown[]) => ({ id:'model-id', userIntent:'ignored', summary:'Готово', explanation:'После подтверждения', actions, missingInformation:[], suggestedQuestions:[], riskLevel:'low' });
@@ -31,4 +31,10 @@ describe('OpenAI plan adapter', () => {
       fetchImpl: async () => responseWithPlan(modelPlan([{type:'add_module',payload:{moduleType:'booking'}}])),
     })).rejects.toMatchObject({ code:'AI_INVALID_PLAN' } satisfies Partial<AIServiceError>);
   });
+  it('rejects template replacement for incremental shop and follow-up requests', () => {
+    expect(() => validatePlanRisk(modelPlan([{type:'create_from_template',payload:{templateId:'store'}}]) as any, 'Добавь магазин')).toThrowError(AIServiceError);
+    expect(() => validatePlanRisk(modelPlan([{type:'create_from_template',payload:{templateId:'coffee'}}]) as any, 'а теперь сделай темнее')).toThrowError(AIServiceError);
+  });
+  it('allows a template for explicit new app intent', () => expect(validatePlanRisk(modelPlan([{type:'create_from_template',payload:{templateId:'store'}}]) as any, 'Создай новое приложение магазина').actions).toHaveLength(1));
+  it('rejects implicit module removal', () => expect(() => validatePlanRisk(modelPlan([{type:'remove_module',payload:{moduleType:'offers'}}]) as any, 'Сделай проще')).toThrowError(AIServiceError));
 });
