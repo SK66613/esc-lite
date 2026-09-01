@@ -3,6 +3,7 @@ import { AIPlanSchema } from '../src/ai/schema/AIPlanSchema';
 import { AIPlannerRequestSchema, type AIPlannerRequest, type ValidatedCapabilityManifest } from '../src/ai/schema/AIPlannerRequestSchema';
 import { AI_COMPOSER_SYSTEM_PROMPT } from '../src/ai/prompts/systemPrompt';
 import { AI_PLAN_JSON_SCHEMA } from './aiPlanJsonSchema';
+import { SERVER_ALLOWED_CAPABILITY_IDS } from '../src/ai/capabilities/allowedCapabilityIds';
 
 export const DEFAULT_AI_MODEL = 'gpt-5.6-terra';
 
@@ -12,7 +13,8 @@ export class AIServiceError extends Error {
   }
 }
 
-type CreatePlanOptions = { apiKey: string; model?: string; fetchImpl?: typeof fetch; timeoutMs?: number };
+export type AIUsage = { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+type CreatePlanOptions = { apiKey: string; model?: string; fetchImpl?: typeof fetch; timeoutMs?: number; onUsage?: (usage: AIUsage) => void };
 
 type OpenAIResponseLike = { output_text?: unknown; output?: unknown; error?: { message?: unknown } };
 
@@ -68,6 +70,27 @@ export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: Vali
   return plan;
 }
 
+function assertServerAllowedCapabilities(capabilities: ValidatedCapabilityManifest) {
+  const groups = [
+    [capabilities.modules, SERVER_ALLOWED_CAPABILITY_IDS.modules, 'type'],
+    [capabilities.tools, SERVER_ALLOWED_CAPABILITY_IDS.tools, 'type'],
+    [capabilities.guards, SERVER_ALLOWED_CAPABILITY_IDS.guards, 'type'],
+    [capabilities.templates, SERVER_ALLOWED_CAPABILITY_IDS.templates, 'id'],
+  ] as const;
+  for (const [items, allowed, key] of groups) for (const item of items)
+    if (!allowed.has((item as Record<string,string>)[key] as never)) throw new AIServiceError('AI_INVALID_PLAN', 400, 'Client supplied an unavailable capability');
+}
+
+const CREATE_INTENT = /(?:созда(?:й|ть)|сделай)\s+(?:нов(?:ое|ый|ую)\s+)?(?:приложени|mini.?app)|(?:замени|пересоздай|начни\s+(?:сначала|заново)|start over|replace|create (?:a )?new app)/iu;
+const REMOVE_INTENT = /(?:убери|удали|отключи|remove|delete|disable)\b/iu;
+export function validatePlanRisk(plan: AIPlan, message: string): AIPlan {
+  if (plan.actions.some((action) => action.type === 'create_from_template') && !CREATE_INTENT.test(message))
+    throw new AIServiceError('AI_INVALID_PLAN', 422, 'Template replacement requires explicit intent');
+  if (plan.actions.some((action) => action.type === 'remove_module') && !REMOVE_INTENT.test(message))
+    throw new AIServiceError('AI_INVALID_PLAN', 422, 'Module removal requires explicit intent');
+  return plan;
+}
+
 const safeUpstreamMessage = (status: number) => {
   if (status === 401 || status === 403) return new AIServiceError('AI_AUTH', 503, 'AI временно не настроен');
   if (status === 429) return new AIServiceError('AI_RATE_LIMIT', 429, 'Слишком много AI-запросов. Попробуйте чуть позже.');
@@ -77,10 +100,12 @@ const safeUpstreamMessage = (status: number) => {
 
 export async function createOpenAIPlan(rawRequest: unknown, options: CreatePlanOptions): Promise<AIPlan> {
   const request: AIPlannerRequest = AIPlannerRequestSchema.parse(rawRequest);
+  assertServerAllowedCapabilities(request.capabilities);
   const projectForModel = structuredClone(request.project);
   delete projectForModel.published;
   const modelInput = JSON.stringify({
     userRequest: request.message,
+    conversation: request.conversation ?? [],
     currentProject: projectForModel,
     capabilities: request.capabilities,
     task: 'Return the smallest useful AIPlan. The plan is only a proposal and will be validated again before execution.',
@@ -108,6 +133,14 @@ export async function createOpenAIPlan(rawRequest: unknown, options: CreatePlanO
     });
     const payload: unknown = await response.json().catch(() => ({}));
     if (!response.ok) throw safeUpstreamMessage(response.status);
+    if (payload && typeof payload === 'object') {
+      const usage = (payload as { usage?: Record<string, unknown> }).usage;
+      if (usage) options.onUsage?.({
+        ...(typeof usage.input_tokens === 'number' ? { inputTokens:usage.input_tokens } : {}),
+        ...(typeof usage.output_tokens === 'number' ? { outputTokens:usage.output_tokens } : {}),
+        ...(typeof usage.total_tokens === 'number' ? { totalTokens:usage.total_tokens } : {}),
+      });
+    }
     let decoded: unknown;
     try { decoded = JSON.parse(extractOpenAIOutputText(payload)); }
     catch (error) {
@@ -116,9 +149,8 @@ export async function createOpenAIPlan(rawRequest: unknown, options: CreatePlanO
     }
     const parsed = AIPlanSchema.safeParse(decoded);
     if (!parsed.success) throw new AIServiceError('AI_INVALID_PLAN', 502, 'AI вернул план неправильного формата');
-    if (parsed.data.actions.length > 40) throw new AIServiceError('AI_INVALID_PLAN', 502, 'AI предложил слишком много изменений за один раз');
     const authoritative: AIPlan = { ...parsed.data, id:`remote-${crypto.randomUUID()}`, userIntent:request.message };
-    return validatePlanAgainstCapabilities(authoritative, request.capabilities);
+    return validatePlanRisk(validatePlanAgainstCapabilities(authoritative, request.capabilities), request.message);
   } catch (error) {
     if (controller.signal.aborted) throw new AIServiceError('AI_TIMEOUT', 504, 'AI не успел ответить. Попробуйте ещё раз.');
     throw error;

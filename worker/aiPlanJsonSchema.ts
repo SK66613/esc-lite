@@ -27,7 +27,7 @@ export const AI_PLAN_JSON_SCHEMA: JsonSchema = object({
   userIntent: { type:'string' },
   summary: { type:'string' },
   explanation: { type:'string' },
-  actions: { type:'array', items:{ oneOf:actionSchemas }, maxItems:40 },
+  actions: { type:'array', items:{ oneOf:actionSchemas }, maxItems:20 },
   missingInformation: { type:'array', items:{type:'string'}, maxItems:20 },
   suggestedQuestions: { type:'array', items:{type:'string'}, maxItems:20 },
   riskLevel: { type:'string', enum:['low','medium','high'] },
