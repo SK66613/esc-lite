@@ -8,8 +8,9 @@ export class TelegramInitDataError extends Error {
   constructor(public readonly code:'TELEGRAM_AUTH_REQUIRED'|'TELEGRAM_AUTH_INVALID', message:string){super(message);this.name='TelegramInitDataError';}
 }
 
-const hmacSha256=async(key:BufferSource,data:string):Promise<Uint8Array>=>{
-  const cryptoKey=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+const asArrayBuffer=(value:Uint8Array):ArrayBuffer=>value.slice().buffer as ArrayBuffer;
+const hmacSha256=async(key:Uint8Array,data:string):Promise<Uint8Array>=>{
+  const cryptoKey=await crypto.subtle.importKey('raw',asArrayBuffer(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   return new Uint8Array(await crypto.subtle.sign('HMAC',cryptoKey,encoder.encode(data)));
 };
 
