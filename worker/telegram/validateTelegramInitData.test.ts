@@ -4,7 +4,8 @@ import { TelegramInitDataError, validateTelegramInitData } from './validateTeleg
 const TOKEN='123456:TEST_TOKEN';
 const NOW_MS=1_800_000_000_000;
 const encoder=new TextEncoder();
-const hmac=async(key:BufferSource,data:string)=>{const cryptoKey=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-256'},false,['sign']);return new Uint8Array(await crypto.subtle.sign('HMAC',cryptoKey,encoder.encode(data)));};
+const asArrayBuffer=(value:Uint8Array):ArrayBuffer=>value.slice().buffer as ArrayBuffer;
+const hmac=async(key:Uint8Array,data:string)=>{const cryptoKey=await crypto.subtle.importKey('raw',asArrayBuffer(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);return new Uint8Array(await crypto.subtle.sign('HMAC',cryptoKey,encoder.encode(data)));};
 const toHex=(bytes:Uint8Array)=>Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');
 
 async function signedInitData(overrides:Record<string,string>={}){
