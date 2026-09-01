@@ -1,6 +1,6 @@
 # Escalita Lite v2
 
-Локальный frontend-конструктор Mini App на Vite, React и strict TypeScript. Версия v2 сохраняет интерактивность Vanilla-прототипа, но делает центральной сущностью **Project**, а не Sales Passport.
+AI-first конструктор Telegram Mini App на Vite, React, strict TypeScript и Cloudflare Workers. Центральная сущность — сериализуемый `Project`; AI не генерирует runtime-код, а предлагает валидируемый `AIPlan`, который применяется существующим executor только после подтверждения пользователя.
 
 ## Запуск
 
@@ -9,6 +9,8 @@ npm install
 npm run dev
 ```
 
+В обычном Vite dev используется `MockAIPlanner`, поэтому локальная разработка не требует Telegram auth или реального AI key.
+
 Production build и тесты:
 
 ```bash
@@ -16,50 +18,56 @@ npm run build
 npm run test
 ```
 
-Vite использует относительный `base`, поэтому содержимое `dist/` можно разместить на статическом hosting без backend routes.
-
 ## Архитектура
 
 - `src/project/` — Zod schema, Project store, draft/published operations, repository и legacy migration.
-- `src/project/validation/` — registry-aware runtime validation; повреждённая известная entity восстанавливается отдельно, а неизвестные future types сохраняются.
-- `src/app/editorStore.ts` — только UI-состояние конструктора: route, selection, sheet, preview source/device.
-- `src/modules/` — customer-модули и `moduleRegistry`; preview и inspector выбираются registry, а не `if/else` в Builder.
-- `src/tools/` — отдельный registry бизнес-инструментов; QR Sales не входит в `modules[]`.
-- `src/guards/` — access guards; Telegram subscription не является страницей клиентского приложения.
-- `src/templates/` — Coffee House, Beauty Salon, Store и Restaurant создают разные сериализуемые Project blueprints.
-- `src/builder/`, `src/preview/`, `src/pages/` — presentation/use-case boundaries.
-- `src/styles/tokens.css` — компактный набор общих design tokens.
+- `src/project/validation/` — registry-aware runtime validation.
+- `src/ai/` — AIPlan/actions, Capability Manifest, Mock/Remote planner, Proposal → Apply UI и executor boundary.
+- `src/modules/`, `src/tools/`, `src/guards/` — независимые registries возможностей Mini App.
+- `src/templates/` — Coffee House, Beauty Salon, Store и Restaurant blueprints.
+- `worker/` — Cloudflare Worker API для реального AI и Telegram Mini App authentication.
 
-### Project model
+## Production AI
 
-`Project` содержит metadata, theme, navigation, ordered `modules[]`, `guards[]`, `tools[]`, `draftRevision` и опциональный immutable-on-create published snapshot. Любая настройка увеличивает revision. Publish остаётся локальным: он deep-clone'ит draft, записывает revision и ISO timestamp.
+Production `RemoteAIPlanner` вызывает same-origin `POST /api/ai/plan`. Browser передаёт текущий draft Project, Capability Manifest, пользовательский intent и bounded conversation context. Сырые Telegram `initData` передаются только в заголовке `X-Telegram-Init-Data` и не включаются в AI body/prompt.
 
-Компоненты не используют `localStorage` напрямую. Они работают через Zustand actions, а persistence скрыт интерфейсом `ProjectRepository`. `LocalStorageProjectRepository` можно позже заменить API-реализацией без изменений UI.
+Worker проверяет `Telegram.WebApp.initData` через HMAC-SHA-256 с `TELEGRAM_BOT_TOKEN`, проверяет `auth_date` (TTL 24 часа), после чего rate limit применяется к подтверждённому Telegram user id. Клиентский Capability Manifest не является единственным источником авторизации: Worker дополнительно проверяет capability identifiers по server-owned allowlist и повторно валидирует AIPlan.
 
-### Расширение
+Необходимые Cloudflare secrets:
 
-**Новый module:** создайте Zod config schema/defaults, `PreviewComponent`, `InspectorComponent`, затем добавьте definition в `src/modules/registry.ts`. Config обязан оставаться JSON-serializable.
+```bash
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put TELEGRAM_BOT_TOKEN
+```
 
-**Новый tool:** создайте schema/defaults/settings component в `src/tools/<tool>` и зарегистрируйте definition в `src/tools/registry.ts`.
+Опционально можно задать `OPENAI_MODEL`. Значения секретов никогда не должны попадать в Git, Vite env или frontend bundle.
 
-**Новый guard:** создайте schema/defaults/settings и опциональный preview в `src/guards/<guard>`, затем добавьте definition в `src/guards/registry.ts`. Текущий shape уже различает app/module scope, но сложного rule engine намеренно нет.
+Диагностика без расходования AI tokens:
 
-**Новый template:** добавьте `TemplateBlueprint` в `src/templates/registry.ts`. Blueprint создаёт новый Project с собственными modules/tools/guards, а не патчит название существующего паспорта.
+```text
+GET /api/health
+```
 
-Применение template к существующему проекту меняет только draft-структуру. `project.id` и предыдущий `published` snapshot сохраняются, а `draftRevision` увеличивается на единицу.
+Endpoint возвращает только boolean `aiConfigured` и `telegramAuthConfigured`.
 
-## Persistence и migration
+## AI safety
 
-Новый ключ: `escalita-lite-project-v2`. При его отсутствии repository best-effort читает `escalita-lite-demo-v1`, переносит `app.name/category`, Passport, QR и subscription, валидирует результат и сохраняет v2 Project. Повреждённые данные безопасно заменяются Coffee House default project.
+- AI не публикует приложение автоматически и не изменяет published snapshot.
+- Все изменения сначала показываются как Proposal и требуют `Применить`.
+- Максимум 20 actions в одном плане.
+- Narrow follow-up requests не имеют права заменять приложение template-ом.
+- Shop/Booking не симулируются, пока соответствующие capabilities реально не зарегистрированы.
+- Conversation context ограничен 8 turns / 6000 символов и не хранится в Project.
+- Logs содержат request id, безопасный user hash, model, duration, action count и aggregate token usage, но не prompt, Project, message, conversation, initData или secrets.
 
-## Текущие mock-ограничения
+## Persistence и publish
 
-- Нет backend, API, auth, базы данных или Telegram SDK/initData.
-- Publish и QR scan полностью локальные; QR не содержит криптографии.
-- Проверка подписки и статус бота — интерактивный mock без Telegram API.
-- Offers — placeholder, доказывающий multi-module registry. Shop и Booking намеренно не реализованы.
-- Один локальный Project; multi-workspace и реальные аккаунты отсутствуют.
+Project пока хранится локально через `ProjectRepository`/LocalStorage adapter. Draft/Published snapshots остаются локальными. Backend project persistence, accounts и реальный publish backend ещё не реализованы.
 
-## Следующая точка интеграции API
+## Текущие ограничения
 
-Первой заменяется реализация `ProjectRepository`: UI и stores могут сохранить текущий контракт, а API repository возьмёт на себя load/save/reset и серверную публикацию. Отдельные integrations для payments, Telegram guards и QR должны оставаться за границами соответствующих registries, а не попадать в сериализуемый Project JSON.
+- Rate limiter isolate-local in-memory; для публичного high-volume запуска потребуется распределённое хранилище.
+- Conversation не сохраняется после reload.
+- Server capability allowlist пока синхронизируется вручную с registries; следующим архитектурным шагом должен стать единый server-owned capability catalog.
+- Offers остаётся placeholder; полноценные Shop и Booking ещё не реализованы.
+- Нет billing/token accounting и long-term AI memory.

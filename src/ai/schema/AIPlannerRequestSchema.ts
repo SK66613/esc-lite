@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProjectSchema } from '../../project/schema';
+import { MAX_AI_CONVERSATION_CHARS, MAX_AI_CONVERSATION_TURN_CHARS, MAX_AI_CONVERSATION_TURNS } from '../planner/AIPlanner';
 
 const AIMetadataSchema = z.object({
   purpose: z.string().max(500),
@@ -36,10 +37,23 @@ export const CapabilityManifestSchema = z.object({
   templates: z.array(TemplateCapabilitySchema).max(100),
 }).strict();
 
+export const AIConversationTurnSchema = z.object({
+  role: z.enum(['user','assistant']),
+  content: z.string().trim().min(1).max(MAX_AI_CONVERSATION_TURN_CHARS),
+}).strict();
+
+export const AIConversationSchema = z.array(AIConversationTurnSchema)
+  .max(MAX_AI_CONVERSATION_TURNS)
+  .superRefine((turns, ctx) => {
+    const total = turns.reduce((sum, turn) => sum + turn.content.length, 0);
+    if (total > MAX_AI_CONVERSATION_CHARS) ctx.addIssue({ code:z.ZodIssueCode.custom, message:'Conversation is too large' });
+  });
+
 export const AIPlannerRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
   project: ProjectSchema,
   capabilities: CapabilityManifestSchema,
+  conversation: AIConversationSchema.optional(),
 }).strict();
 
 export type AIPlannerRequest = z.infer<typeof AIPlannerRequestSchema>;

@@ -3,32 +3,16 @@ import { createDefaultProject } from '../src/project/defaults';
 import { buildCapabilityManifest } from '../src/ai/capabilities/buildCapabilityManifest';
 import { AIServiceError, createOpenAIPlan, extractOpenAIOutputText } from './openaiPlan';
 
-const request = (message='Поменяй название') => ({ message, project:createDefaultProject(), capabilities:buildCapabilityManifest() });
-const modelPlan = (actions: unknown[]) => ({ id:'model-id', userIntent:'ignored', summary:'Готово', explanation:'После подтверждения', actions, missingInformation:[], suggestedQuestions:[], riskLevel:'low' });
-const responseWithPlan = (value: unknown) => new Response(JSON.stringify({ output:[{ type:'message', content:[{ type:'output_text', text:JSON.stringify(value) }] }] }), { status:200, headers:{'content-type':'application/json'} });
+const request=(message='Поменяй название')=>({message,project:createDefaultProject(),capabilities:buildCapabilityManifest(),conversation:[]});
+const modelPlan=(actions:unknown[])=>({id:'model-id',userIntent:'ignored',summary:'Готово',explanation:'После подтверждения',actions,missingInformation:[],suggestedQuestions:[],riskLevel:'low'});
+const responseWithPlan=(value:unknown,usage?:unknown)=>new Response(JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}],...(usage?{usage}:{})}),{status:200,headers:{'content-type':'application/json'}});
 
-describe('OpenAI plan adapter', () => {
-  it('extracts output_text from Responses API payload', () => {
-    expect(extractOpenAIOutputText({ output:[{content:[{type:'output_text',text:'{"ok":true}'}]}] })).toBe('{"ok":true}');
-  });
-
-  it('uses Responses API structured output and returns validated plan', async () => {
-    let upstreamBody: any;
-    const plan = await createOpenAIPlan(request(), {
-      apiKey:'secret',
-      fetchImpl: async (_input, init) => { upstreamBody = JSON.parse(String(init?.body)); return responseWithPlan(modelPlan([{type:'set_metadata',payload:{name:'Coffee 13'}}])); },
-    });
-    expect(plan.id).toMatch(/^remote-/);
-    expect(plan.userIntent).toBe('Поменяй название');
-    expect(upstreamBody.model).toBe('gpt-5.6-terra');
-    expect(upstreamBody.store).toBe(false);
-    expect(upstreamBody.text.format.type).toBe('json_schema');
-  });
-
-  it('rejects hallucinated capabilities before returning to the browser', async () => {
-    await expect(createOpenAIPlan(request('Добавь booking'), {
-      apiKey:'secret',
-      fetchImpl: async () => responseWithPlan(modelPlan([{type:'add_module',payload:{moduleType:'booking'}}])),
-    })).rejects.toMatchObject({ code:'AI_INVALID_PLAN' } satisfies Partial<AIServiceError>);
-  });
+describe('OpenAI plan adapter',()=>{
+ it('extracts output_text from Responses API payload',()=>{expect(extractOpenAIOutputText({output:[{content:[{type:'output_text',text:'{"ok":true}'}]}]})).toBe('{"ok":true}');});
+ it('uses structured output, bounded conversation and exposes aggregate usage',async()=>{let upstreamBody:any;let usage:any;const plan=await createOpenAIPlan({...request(),conversation:[{role:'user',content:'раньше было 6'}]},{apiKey:'secret',onUsage:value=>{usage=value;},fetchImpl:async(_input,init)=>{upstreamBody=JSON.parse(String(init?.body));return responseWithPlan(modelPlan([{type:'set_metadata',payload:{name:'Coffee 13'}}]),{input_tokens:100,output_tokens:30,total_tokens:130});}});expect(plan.id).toMatch(/^remote-/);expect(plan.userIntent).toBe('Поменяй название');expect(upstreamBody.model).toBe('gpt-5.6-terra');expect(upstreamBody.store).toBe(false);expect(upstreamBody.input).toContain('раньше было 6');expect(usage).toEqual({inputTokens:100,outputTokens:30,totalTokens:130});});
+ it('rejects hallucinated capabilities before returning to the browser',async()=>{await expect(createOpenAIPlan(request('Добавь booking'),{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([{type:'add_module',payload:{moduleType:'booking'}}]))})).rejects.toMatchObject({code:'AI_INVALID_PLAN'} satisfies Partial<AIServiceError>);});
+ it('rejects destructive template replacement for an incremental request',async()=>{await expect(createOpenAIPlan(request('Добавь магазин'),{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([{type:'create_from_template',payload:{templateId:'store'}}]))})).rejects.toMatchObject({code:'AI_INVALID_PLAN'} satisfies Partial<AIServiceError>);});
+ it('allows a template when the user explicitly creates a new app',async()=>{const plan=await createOpenAIPlan(request('Создай новое приложение магазина'),{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([{type:'create_from_template',payload:{templateId:'store'}}]))});expect(plan.actions[0]).toMatchObject({type:'create_from_template'});});
+ it('rejects module removal without explicit removal intent',async()=>{await expect(createOpenAIPlan(request('Сделай темнее'),{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([{type:'remove_module',payload:{moduleType:'offers_placeholder'}}]))})).rejects.toMatchObject({code:'AI_INVALID_PLAN'} satisfies Partial<AIServiceError>);});
+ it('rejects client-advertised capabilities outside the server allowlist before calling AI',async()=>{const payload:any=request();payload.capabilities={...payload.capabilities,modules:[...payload.capabilities.modules,{type:'booking',title:'Booking',description:'x',version:1,defaultConfig:{}}]};let called=false;await expect(createOpenAIPlan(payload,{apiKey:'secret',fetchImpl:async()=>{called=true;return responseWithPlan(modelPlan([]));}})).rejects.toMatchObject({code:'INVALID_REQUEST'} satisfies Partial<AIServiceError>);expect(called).toBe(false);});
 });
