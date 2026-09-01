@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {describeAIAction} from './describeAIAction';
+describe('describeAIAction',()=>{it('describes only actual business and design patch values in human terms',()=>expect(describeAIAction({type:'patch_module_config',payload:{moduleType:'loyalty_passport',patch:{goal:8,reward:'Скидка 20%',presentation:{visualVariant:'punch_card',stampShape:'square'}}}})).toEqual([{label:'Цель',value:'8'},{label:'Награда',value:'Скидка 20%'},{label:'Вид',value:'Карта с печатями'},{label:'Отметки',value:'Квадратные'}]));});

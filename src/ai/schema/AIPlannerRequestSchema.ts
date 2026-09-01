@@ -6,6 +6,7 @@ const AIMetadataSchema = z.object({
   examples: z.array(z.string().max(500)).max(20).optional(),
   keywords: z.array(z.string().max(120)).max(40).optional(),
   configOptions: z.record(z.string().min(1).max(200),z.object({values:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(50),description:z.string().max(500).optional()}).strict()).optional(),
+  presentationVariants:z.array(z.object({id:z.string().min(1).max(100),title:z.string().min(1).max(200),description:z.string().max(1000),purpose:z.string().max(500).optional(),keywords:z.array(z.string().max(120)).max(40).optional(),bestFor:z.array(z.string().max(200)).max(20).optional(),supports:z.array(z.string().min(1).max(100)).max(20)}).strict()).max(20).optional(),
 }).strict();
 
 const ModuleCapabilitySchema = z.object({

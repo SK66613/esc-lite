@@ -4,6 +4,8 @@ import { AIPlannerRequestSchema, type AIPlannerRequest, type ValidatedCapability
 import { AI_COMPOSER_SYSTEM_PROMPT } from '../src/ai/prompts/systemPrompt';
 import { AI_PLAN_JSON_SCHEMA } from './aiPlanJsonSchema';
 import { SERVER_ALLOWED_CAPABILITY_IDS } from '../src/ai/capabilities/allowedCapabilityIds';
+import { SERVER_MODULE_CONFIG_OPTION_POLICY } from '../src/ai/capabilities/serverConfigOptionPolicy';
+import { PASSPORT_VISUAL_VARIANTS, passportVariantSupports, type PassportPresentationAxis, type PassportVisualVariant } from '../src/modules/loyalty-passport/presentation/options';
 
 export const DEFAULT_AI_MODEL = 'gpt-5.6-terra';
 
@@ -44,7 +46,7 @@ const assertPatchKeys = (patchValue: unknown, defaultConfig: unknown, label: str
   for (const key of Object.keys(patchValue as Record<string, unknown>)) if (!allowed.has(key)) throw new AIServiceError('AI_INVALID_PLAN', 502, `AI предложил неизвестную настройку ${label}.${key}`);
 };
 
-export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: ValidatedCapabilityManifest): AIPlan {
+export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: ValidatedCapabilityManifest, project?:AIPlannerRequest['project']): AIPlan {
   const modules = new Map(capabilities.modules.map((item) => [item.type, item]));
   const tools = new Map(capabilities.tools.map((item) => [item.type, item]));
   const guards = new Map(capabilities.guards.map((item) => [item.type, item]));
@@ -54,7 +56,24 @@ export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: Vali
     if ('moduleType' in action.payload) {
       const capability = modules.get(action.payload.moduleType);
       if (!capability) throw new AIServiceError('AI_INVALID_PLAN', 502, `AI предложил недоступный модуль: ${action.payload.moduleType}`);
-      if (action.type === 'patch_module_config') assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
+      if (action.type === 'patch_module_config') {
+        assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
+        const policy=SERVER_MODULE_CONFIG_OPTION_POLICY[action.payload.moduleType as keyof typeof SERVER_MODULE_CONFIG_OPTION_POLICY];
+        if(policy&&'presentation' in action.payload.patch){
+          const presentation=action.payload.patch.presentation;
+          if(!presentation||typeof presentation!=='object'||Array.isArray(presentation)) throw new AIServiceError('AI_INVALID_PLAN',502,'AI предложил некорректную presentation настройку');
+          for(const [axis,value] of Object.entries(presentation as Record<string,unknown>)){
+            const path=`presentation.${axis}` as keyof typeof policy; const allowed=policy[path];
+            if(!allowed||(allowed as readonly unknown[]).includes(value)===false) throw new AIServiceError('AI_INVALID_PLAN',502,`AI предложил недопустимую настройку ${path}`);
+          }
+          const proposed=(presentation as Record<string,unknown>).visualVariant;
+          const current=project?.modules.find(module=>module.type==='loyalty_passport')?.config;
+          const currentVariant=current&&typeof current==='object'&&!Array.isArray(current)&&(current as Record<string,unknown>).presentation;
+          const currentId=currentVariant&&typeof currentVariant==='object'&&!Array.isArray(currentVariant)?(currentVariant as Record<string,unknown>).visualVariant:undefined;
+          const effective=(typeof proposed==='string'&&PASSPORT_VISUAL_VARIANTS.includes(proposed as PassportVisualVariant)?proposed:typeof currentId==='string'&&PASSPORT_VISUAL_VARIANTS.includes(currentId as PassportVisualVariant)?currentId:'classic_grid') as PassportVisualVariant;
+          for(const axis of Object.keys(presentation as Record<string,unknown>)) if(axis!=='visualVariant'&&!passportVariantSupports(effective,axis as PassportPresentationAxis)) throw new AIServiceError('AI_INVALID_PLAN',502,`Вариант ${effective} не поддерживает presentation.${axis}`);
+        }
+      }
     }
     if ('toolType' in action.payload) {
       const capability = tools.get(action.payload.toolType);
@@ -150,7 +169,7 @@ export async function createOpenAIPlan(rawRequest: unknown, options: CreatePlanO
     const parsed = AIPlanSchema.safeParse(decoded);
     if (!parsed.success) throw new AIServiceError('AI_INVALID_PLAN', 502, 'AI вернул план неправильного формата');
     const authoritative: AIPlan = { ...parsed.data, id:`remote-${crypto.randomUUID()}`, userIntent:request.message };
-    return validatePlanRisk(validatePlanAgainstCapabilities(authoritative, request.capabilities), request.message);
+    return validatePlanRisk(validatePlanAgainstCapabilities(authoritative, request.capabilities,request.project), request.message);
   } catch (error) {
     if (controller.signal.aborted) throw new AIServiceError('AI_TIMEOUT', 504, 'AI не успел ответить. Попробуйте ещё раз.');
     throw error;
