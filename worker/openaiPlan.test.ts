@@ -45,3 +45,14 @@ describe('server-owned Passport presentation policy',()=>{
  it.each([{visualVariant:'premium_card'},{headerMode:'cinematic'},{columns:5},{unknownAxis:true},'punch_card'])('rejects invalid nested presentation %j',async(presentation)=>{await expect(createOpenAIPlan(request(),{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([passportAction(presentation)]))})).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
  it('cannot be widened by a tampered client manifest',async()=>{const tampered=request() as any;tampered.capabilities=structuredClone(tampered.capabilities);tampered.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.configOptions['presentation.visualVariant'].values.push('premium_card');await expect(createOpenAIPlan(tampered,{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([passportAction({visualVariant:'premium_card'})]))})).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
 });
+
+describe('server-owned variant support matrix',()=>{
+ const configuredRequest=(variant:string)=>{const value=request();const module=value.project.modules.find(m=>m.type==='loyalty_passport')!;(module.config as any).presentation.visualVariant=variant;return value};
+ const action=(presentation:Record<string,unknown>)=>({type:'patch_module_config',payload:{moduleType:'loyalty_passport',patch:{presentation}}});
+ const run=(req:ReturnType<typeof request>,presentation:Record<string,unknown>)=>createOpenAIPlan(req,{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([action(presentation)]))});
+ it('rejects columns for current minimal counter',async()=>await expect(run(configuredRequest('minimal_counter'),{columns:4})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('accepts hero header for current punch card',async()=>await expect(run(configuredRequest('punch_card'),{headerMode:'hero'})).resolves.toBeDefined());
+ it('rejects image aspect for current punch card',async()=>await expect(run(configuredRequest('punch_card'),{imageAspect:'portrait'})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('uses the target variant from the same patch',async()=>await expect(run(configuredRequest('minimal_counter'),{visualVariant:'collection_gallery',columns:4,imageAspect:'portrait'})).resolves.toBeDefined());
+ it('ignores tampered client support metadata',async()=>{const req=configuredRequest('minimal_counter') as any;req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.presentationVariants.find((v:any)=>v.id==='minimal_counter').supports.push('columns');await expect(run(req,{columns:4})).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
+});

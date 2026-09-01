@@ -10,3 +10,8 @@ export const PASSPORT_STAMP_SHAPE_LABELS={circle:'Круглые',rounded:'Ск�
 export const PASSPORT_PROGRESS_MODE_LABELS={bar:'Полоса',counter:'Счётчик',ring:'Кольцо',hidden:'Скрыт'} as const;
 export const PASSPORT_IMAGE_ASPECT_LABELS={square:'Квадрат',portrait:'Вертикальный',landscape:'Горизонтальный'} as const;
 export const PASSPORT_COLUMN_LABELS={2:'2',3:'3',4:'4'} as const;
+
+export type PassportVisualVariant = typeof PASSPORT_VISUAL_VARIANTS[number];
+export type PassportPresentationAxis = 'headerMode'|'stampShape'|'progressMode'|'columns'|'imageAspect';
+export const PASSPORT_VARIANT_SUPPORTS={classic_grid:['headerMode','stampShape','progressMode','columns'],punch_card:['headerMode','stampShape','progressMode'],journey_path:['headerMode','progressMode'],collection_gallery:['headerMode','progressMode','columns','imageAspect'],minimal_counter:['progressMode']} as const satisfies Record<PassportVisualVariant,readonly PassportPresentationAxis[]>;
+export const passportVariantSupports=(variant:PassportVisualVariant,axis:PassportPresentationAxis):boolean=>(PASSPORT_VARIANT_SUPPORTS[variant] as readonly PassportPresentationAxis[]).includes(axis);

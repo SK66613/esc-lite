@@ -92,3 +92,10 @@ describe('presentation AI vocabulary',()=>{
  it('keeps registry ids equal to pure options',()=>expect(passportPresentationRegistry.map(x=>x.id)).toEqual([...PASSPORT_VISUAL_VARIANTS]));
  it('projects JSON-safe metadata without renderers',()=>{const projection=buildPassportPresentationAICapabilities();expect(projection).toHaveLength(5);expect(JSON.stringify(projection)).not.toContain('Renderer');expect(projection.find(x=>x.id==='minimal_counter')?.supports).toEqual(['progressMode']);});
 });
+
+it('renders visibly distinct punch-card header modes',()=>{
+ const definition=passportPresentationRegistry.find(item=>item.id==='punch_card')!;const viewModel=buildPassportViewModel(legacy);
+ const compact=renderToStaticMarkup(createElement(definition.Renderer,{viewModel,presentation:normalizePassportPresentation({visualVariant:'punch_card',headerMode:'compact'})}));
+ const hero=renderToStaticMarkup(createElement(definition.Renderer,{viewModel,presentation:normalizePassportPresentation({visualVariant:'punch_card',headerMode:'hero'})}));
+ expect(compact).toContain('passport-punch--header-compact');expect(hero).toContain('passport-punch--header-hero');expect(hero).not.toEqual(compact);
+});
