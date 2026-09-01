@@ -3,9 +3,12 @@ import { AIPlanSchema, type AIPlan } from '../schema/AIPlanSchema';
 import type { AIPlanner, AIPlannerInput } from './AIPlanner';
 const includesAny=(s:string,words:string[])=>words.some(word=>s.includes(word));
 export class MockAIPlanner implements AIPlanner {
- async plan({message,capabilities}:AIPlannerInput):Promise<AIPlan>{
+ async plan({message,capabilities,project}:AIPlannerInput):Promise<AIPlan>{
   const text=message.toLocaleLowerCase('ru'); const actions:AIAction[]=[]; const missing:string[]=[];
   const wantsNewApp=includesAny(text,['сделай приложение','создай приложение','собери приложение','сделай mini','создай mini','сделай мини','создай мини']);
+  const passportExists=project.modules.some(module=>module.type==='loyalty_passport');
+  const variant=includesAny(text,['как настоящую карточку','карточка с печатями'])?'punch_card':includesAny(text,['дорожкой','путь','этапы'])?'journey_path':includesAny(text,['коллекция','коллекцию','как коллекцию'])?'collection_gallery':includesAny(text,['минималистично','проще','только прогресс','без кучи кружочков'])?'minimal_counter':includesAny(text,['классический','обычная сетка','обычный вид'])?'classic_grid':undefined;
+  if(variant&&passportExists) actions.push({type:'patch_module_config',payload:{moduleType:'loyalty_passport',patch:{presentation:{visualVariant:variant}}}});
   const template=wantsNewApp?(includesAny(text,['кофейн','кофе house'])?'coffee_house':includesAny(text,['салон красоты','beauty'])?'beauty_salon':includesAny(text,['ресторан'])?'restaurant':includesAny(text,['магазин'])?'store':undefined):undefined;
   if(template&&capabilities.templates.some(t=>t.id===template)) actions.push({type:'create_from_template',payload:{templateId:template}});
   const loyalty=/\b(\d{1,2})\s*(?:-?й|кофе|визит)/i.exec(text);
@@ -13,7 +16,7 @@ export class MockAIPlanner implements AIPlanner {
   if(includesAny(text,['добавь qr','нужен qr',' qr'])) actions.push({type:'set_tool_enabled',payload:{toolType:'qr_sales',enabled:true}});
   if(includesAny(text,['убери акции','отключи акции'])) actions.push({type:'set_module_enabled',payload:{moduleType:'offers_placeholder',enabled:false}});
   const name=/(?:название|назови)\s+(?:на\s+)?[«"]?([^\n.!»"]+)/i.exec(message); if(name?.[1]) actions.push({type:'set_metadata',payload:{name:name[1].trim()}});
-  const color=/#([0-9a-f]{6})\b/i.exec(message); if(color) actions.push({type:'set_theme',payload:{primaryColor:`#${color[1]}`}});
+  const color=/#([0-9a-f]{6})\b/i.exec(message); if(color) actions.push({type:'set_theme',payload:{primaryColor:`#${color[1]}`}}); else if(includesAny(text,['другой цвет','тёмный','темнее'])) actions.push({type:'set_theme',payload:{primaryColor:'#172033'}});
   const asksBooking=includesAny(text,['онлайн-запис','онлайн запис','booking','запись']);
   const asksShopFeature=includesAny(text,['добавь магазин','интернет-магазин','shop','корзин','каталог товаров']);
   if(asksBooking) missing.push('Онлайн-запись пока недоступна в текущем наборе возможностей.');

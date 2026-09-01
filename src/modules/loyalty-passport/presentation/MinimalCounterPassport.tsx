@@ -1,0 +1,2 @@
+import type { PassportRendererProps } from './types'; import { Progress,QRButton } from './Shared';
+export function MinimalCounterPassport(props:PassportRendererProps){const {viewModel:v}=props;return <article className="passport passport-minimal"><span className="passport-eyebrow">{v.name}</span><div className="passport-big-counter"><strong>{v.filled}</strong><span>/ {v.goal}</span></div><h2>{v.reward}</h2><p>Осталось: {v.remaining} {v.unit}</p><Progress {...props}/><QRButton/></article>}
