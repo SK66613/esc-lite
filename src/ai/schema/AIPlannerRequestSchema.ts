@@ -5,6 +5,7 @@ const AIMetadataSchema = z.object({
   purpose: z.string().max(500),
   examples: z.array(z.string().max(500)).max(20).optional(),
   keywords: z.array(z.string().max(120)).max(40).optional(),
+  configOptions: z.record(z.string().min(1).max(200),z.object({values:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(50),description:z.string().max(500).optional()}).strict()).optional(),
 }).strict();
 
 const ModuleCapabilitySchema = z.object({

@@ -5,7 +5,7 @@ import { templateRegistry } from '../../templates/registry';
 
 type JSONValue=null|boolean|number|string|JSONValue[]|{[key:string]:JSONValue};
 export interface CapabilityManifest {
- modules:Array<{type:string;title:string;description:string;version:number;defaultConfig:JSONValue;ai?:{purpose:string;examples?:string[];keywords?:string[]}}>;
+ modules:Array<{type:string;title:string;description:string;version:number;defaultConfig:JSONValue;ai?:{purpose:string;examples?:string[];keywords?:string[];configOptions?:Record<string,{values:readonly (string|number|boolean)[];description?:string}>}}>;
  tools:Array<{type:string;title:string;description:string;defaultConfig:JSONValue}>;
  guards:Array<{type:string;title:string;description:string;defaultConfig:JSONValue}>;
  templates:Array<{id:string;title:string;description:string}>;

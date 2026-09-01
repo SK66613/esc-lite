@@ -14,7 +14,7 @@ const toolDefinition=(type:string)=>toolRegistry[type as keyof typeof toolRegist
 const guardDefinition=(type:string)=>guardRegistry[type as keyof typeof guardRegistry]??fail(`Unknown guard type: ${type}`);
 const moduleDefinition=(type:string)=>isModuleType(type)?moduleRegistry[type]:fail(`Unknown module type: ${type}`);
 const templateDefinition=(id:string)=>templateRegistry[id as TemplateId]??fail(`Unknown template: ${id}`);
-const merge=(current:unknown,patch:Record<string,unknown>)=>({...((current&&typeof current==='object'&&!Array.isArray(current))?current:{}),...patch});
+const merge=(current:unknown,patch:Record<string,unknown>):Record<string,unknown>=>{const base=(current&&typeof current==='object'&&!Array.isArray(current))?current as Record<string,unknown>:{};return Object.fromEntries([...new Set([...Object.keys(base),...Object.keys(patch)])].map(key=>{const value=patch[key];return [key,value&&typeof value==='object'&&!Array.isArray(value)?merge(base[key],value as Record<string,unknown>):key in patch?value:base[key]]}))};
 
 function applyAction(project:Project,unsafe:unknown):Project {
  const action:AIAction=AIActionSchema.parse(unsafe);
