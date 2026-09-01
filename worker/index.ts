@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import { AIServiceError, createOpenAIPlan } from './openaiPlan';
 import { TelegramInitDataError, validateTelegramInitData } from './telegram/validateTelegramInitData';
+import { getTelegramBotDiagnostics, TelegramBotDiagnosticsError } from './telegram/botDiagnostics';
 
 interface Env {
   OPENAI_API_KEY?: string;
@@ -27,6 +28,19 @@ const allowRequest = (key: string, now = Date.now()): { allowed: boolean; retryA
   if (current.count >= MAX_REQUESTS_PER_WINDOW) return { allowed:false, retryAfter:Math.max(1, Math.ceil((current.resetAt - now) / 1000)) };
   current.count += 1;
   return { allowed:true };
+};
+
+const handleTelegramDiagnostics = async (env: Env): Promise<Response> => {
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ ok:false, code:'TELEGRAM_NOT_CONFIGURED', message:'Telegram bot token is not configured' }, 503);
+  try {
+    return json(await getTelegramBotDiagnostics(env.TELEGRAM_BOT_TOKEN));
+  } catch (error) {
+    if (error instanceof TelegramBotDiagnosticsError) {
+      const status = error.code === 'TELEGRAM_BOT_API_AUTH' ? 502 : 503;
+      return json({ ok:false, code:error.code, message:error.code === 'TELEGRAM_BOT_API_AUTH' ? 'Telegram rejected the configured bot token' : 'Telegram Bot API is temporarily unavailable' }, status);
+    }
+    return json({ ok:false, code:'TELEGRAM_DIAGNOSTICS_FAILED', message:'Telegram diagnostics failed' }, 503);
+  }
 };
 
 const handleAIPlan = async (request: Request, env: Env): Promise<Response> => {
@@ -76,6 +90,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/health' && request.method === 'GET') return json({ ok:true, aiConfigured:Boolean(env.OPENAI_API_KEY), telegramAuthConfigured:Boolean(env.TELEGRAM_BOT_TOKEN) });
+    if (url.pathname === '/api/telegram/diagnostics' && request.method === 'GET') return handleTelegramDiagnostics(env);
     if (url.pathname === '/api/ai/plan') return handleAIPlan(request, env);
     if (url.pathname.startsWith('/api/')) return json({ code:'NOT_FOUND', message:'API route not found' }, 404);
     return env.ASSETS.fetch(request);
