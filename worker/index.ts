@@ -18,6 +18,7 @@ const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 12;
 const MAX_BODY_CHARS = 128_000;
+const PASSPORT_MEDIA_PATH_PREFIX='/api/media/passport-covers/';
 
 const json = (value: unknown, status = 200, headers: Record<string,string> = {}) => new Response(JSON.stringify(value), {
   status,
@@ -96,7 +97,7 @@ export default {
     if (url.pathname === '/api/telegram/diagnostics' && request.method === 'GET') return handleTelegramDiagnostics(env);
     if (url.pathname === '/api/ai/plan') return handleAIPlan(request, env);
     if (url.pathname === '/api/media/passport-covers' && request.method === 'POST') return handleMediaUpload(request, env);
-    if (url.pathname.startsWith('/api/media/passport-covers/') && request.method === 'GET') return handleMediaGet(decodeURIComponent(url.pathname.slice('/api/media/passport-covers/'.length)), env);
+    if (url.pathname.startsWith(PASSPORT_MEDIA_PATH_PREFIX) && request.method === 'GET') return handleMediaGet(url.pathname.slice(PASSPORT_MEDIA_PATH_PREFIX.length), env);
     if (url.pathname.startsWith('/api/')) return json({ code:'NOT_FOUND', message:'API route not found' }, 404);
     return env.ASSETS.fetch(request);
   },
