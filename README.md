@@ -83,3 +83,7 @@ Vite использует относительный `base`, поэтому со
 ## Следующая точка интеграции API
 
 Первой заменяется реализация `ProjectRepository`: UI и stores могут сохранить текущий контракт, а API repository возьмёт на себя load/save/reset и серверную публикацию. Отдельные integrations для payments, Telegram guards и QR должны оставаться за границами соответствующих registries, а не попадать в сериализуемый Project JSON.
+
+## Passport media infrastructure
+
+Passport uploads require the `MEDIA_BUCKET` R2 binding and a stable, high-entropy `MEDIA_SIGNING_SECRET`. Rotating `MEDIA_SIGNING_SECRET` changes future owner/project quota scopes and therefore requires a deliberate migration plan; never derive it from another credential or expose it to the browser.
