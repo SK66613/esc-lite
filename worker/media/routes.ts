@@ -26,7 +26,11 @@ const MAX_FILE_BYTES=3*1024*1024;
 const MAX_MULTIPART_BYTES=4*1024*1024;
 const json=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(code:string,status:number,message:string)=>json({code,message},status);
-const storageError=(operation:string)=>{console.error(JSON.stringify({event:'passport_media_storage_error',operation,code:'MEDIA_STORAGE_ERROR'}));return error('MEDIA_STORAGE_ERROR',503,'Хранилище временно недоступно');};
+const storageError=(operation:'put'|'get')=>{
+  const code=operation==='put'?'MEDIA_STORAGE_PUT':'MEDIA_STORAGE_GET';
+  console.error(JSON.stringify({event:'passport_media_storage_error',operation,code}));
+  return error(code,503,'Хранилище временно недоступно');
+};
 
 /** Safe runtime probe: never exposes bucket names, secrets, identities, keys or object data. */
 export async function handleMediaDiagnostics(env:MediaEnv,deps=productionDeps) {
@@ -69,15 +73,15 @@ export async function handleMediaUpload(request:Request,env:MediaEnv,deps=produc
   if(file.size>MAX_FILE_BYTES)return error('MEDIA_FILE_TOO_LARGE',413,'Файл слишком большой');
   const buffer=await file.arrayBuffer();let dimensions;
   try{dimensions=inspectJPEG(new Uint8Array(buffer));}catch(e){if(e instanceof JPEGError)return error('MEDIA_INVALID_JPEG',400,'Некорректный JPEG');throw e;}
-  const identity=await deps.createIdentity(env.MEDIA_SIGNING_SECRET,userId,projectId);
-  const base='passport-media/v1/';
+  let identity:Identity;
+  try{identity=await deps.createIdentity(env.MEDIA_SIGNING_SECRET,userId,projectId);}catch{return error('MEDIA_IDENTITY_ERROR',503,'Хранилище временно недоступно');}
+
+  // Keep the critical upload path aligned with the proven build-apps media service:
+  // validate/authenticate first, then write directly to R2. Durable quotas belong in
+  // an authoritative account/project store, not in race-prone R2 list scans.
   try {
-    const owner=await env.MEDIA_BUCKET.list({prefix:`${base}m1_${identity.ownerScope}_`,limit:101});
-    if(owner.objects.length>=100)return error('MEDIA_USER_QUOTA',429,'Лимит файлов пользователя исчерпан');
-    const project=await env.MEDIA_BUCKET.list({prefix:`${base}m1_${identity.ownerScope}_${identity.projectScope}_`,limit:41});
-    if(project.objects.length>=40)return error('MEDIA_PROJECT_QUOTA',429,'Лимит файлов проекта исчерпан');
     await env.MEDIA_BUCKET.put(mediaKey(identity.mediaId),buffer,{httpMetadata:{contentType:'image/jpeg',cacheControl:CACHE_CONTROL},customMetadata:{ownerScope:identity.ownerScope,projectScope:identity.projectScope,width:String(dimensions.width),height:String(dimensions.height),createdAt:new Date(now).toISOString()}});
-  } catch { return storageError('upload'); }
+  } catch { return storageError('put'); }
   return json({mediaId:identity.mediaId,contentType:'image/jpeg',bytes:file.size,...dimensions},201);
 }
 
