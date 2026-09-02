@@ -15,6 +15,8 @@ import { OffersInspector } from './offers-placeholder/OffersInspector';
 export interface ModuleViewProps<TConfig> { config: TConfig }
 export interface ModuleInspectorProps<TConfig> extends ModuleViewProps<TConfig> {
   onChange: (config: TConfig) => void;
+  projectId: string;
+  moduleId: string;
 }
 
 interface TypedModuleDefinition<TSchema extends ZodTypeAny> {
@@ -50,10 +52,11 @@ function defineModule<TSchema extends ZodTypeAny>(definition: TypedModuleDefinit
     ...definition,
     PreviewComponent: ({ config }) =>
       <TypedPreview config={definition.ConfigSchema.parse(config)} />,
-    InspectorComponent: ({ config, onChange }) =>
+    InspectorComponent: ({ config, onChange, projectId, moduleId }) =>
       <TypedInspector
         config={definition.ConfigSchema.parse(config)}
         onChange={(next) => onChange(next)}
+        projectId={projectId} moduleId={moduleId}
       />,
   };
 }

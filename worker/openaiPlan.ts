@@ -61,6 +61,7 @@ export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: Vali
         assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
         if(action.payload.moduleType==='loyalty_passport'&&'stampContent' in action.payload.patch){
           const parsed=PassportStampContentMapSchema.safeParse(action.payload.patch.stampContent);
+          if(parsed.success&&Object.values(parsed.data).some(item=>item?.cover?.source==='media'))throw new AIServiceError('AI_INVALID_PLAN',502,'AI не может выбирать пользовательские медиа');
           if(!parsed.success)throw new AIServiceError('AI_INVALID_PLAN',502,'AI предложил некорректное содержание этапов');
           const patchedGoal=action.payload.patch.goal;
           const currentConfig=project?.modules.find(module=>module.type==='loyalty_passport')?.config;
