@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMediaRouteDeps, handleMediaDiagnostics, handleMediaGet, handleMediaUpload, type MediaBucket } from './routes';
 const mediaId='m1_abcdefghijklmnop_qrstuvwxyzABCDEF_123e4567-e89b-42d3-a456-426614174000';
 const structuralJPEG=new Uint8Array([0xff,0xd8,0xff,0xc0,0,17,8,0,2,0,3,3,1,0x11,0,2,0x11,0,3,0x11,0,0xff,0xda,0,8,1,1,0,0,63,0,1,2,0xff,0xd9]);
 class FakeBucket implements MediaBucket {
-  objects=new Map<string,{bytes:ArrayBuffer;options?:any;etag?:string}>(); puts:string[]=[]; lists:{prefix:string;limit?:number}[]=[]; fail?:'list'|'put'|'get';
-  async put(key:string,value:ArrayBuffer,options?:any){if(this.fail==='put')throw new Error('private r2 detail');this.puts.push(key);this.objects.set(key,{bytes:value,options});}
+  objects=new Map<string,{bytes:ArrayBuffer;options?:any;etag?:string}>(); puts:string[]=[]; lists:{prefix:string;limit?:number}[]=[]; fail?:'list'|'put'|'get'; putError:unknown=new Error('private r2 detail');
+  async put(key:string,value:ArrayBuffer,options?:any){if(this.fail==='put')throw this.putError;this.puts.push(key);this.objects.set(key,{bytes:value,options});}
   async get(key:string){if(this.fail==='get')throw new Error('private r2 detail');const value=this.objects.get(key);return value?{body:value.bytes,httpEtag:value.etag}:null;}
   async list(options:{prefix:string;limit?:number}){if(this.fail==='list')throw new Error('private r2 detail');this.lists.push(options);return {objects:[...this.objects.keys()].filter(key=>key.startsWith(options.prefix)).slice(0,options.limit).map(key=>({key}))};}
 }
@@ -33,7 +33,30 @@ describe('Passport media upload route',()=>{
   it('writes exact key and safe metadata without R2 list scans',async()=>{const bucket=new FakeBucket();const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(201);expect(bucket.puts).toEqual([`passport-media/v1/${mediaId}.jpg`]);const stored=bucket.objects.get(bucket.puts[0])!;expect(stored.options.httpMetadata).toEqual({contentType:'image/jpeg',cacheControl:'public, max-age=31536000, immutable'});expect(stored.options.customMetadata).toMatchObject({ownerScope:'abcdefghijklmnop',projectScope:'qrstuvwxyzABCDEF',width:'3',height:'2'});expect(Object.keys(await response.json())).toEqual(['mediaId','contentType','bytes','width','height']);expect(bucket.lists).toHaveLength(0);});
   it('uploads even when R2 list is unavailable because list is diagnostics-only',async()=>{const bucket=new FakeBucket();bucket.fail='list';const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(201);expect(bucket.puts).toEqual([`passport-media/v1/${mediaId}.jpg`]);expect(bucket.lists).toHaveLength(0);});
   it('returns a safe identity error before writing',async()=>{const bucket=new FakeBucket();const response=await handleMediaUpload(uploadRequest(),env(bucket),deps({createIdentity:async()=>{throw new Error('secret detail')}}));expect(response.status).toBe(503);expect(await bodyCode(response)).toBe('MEDIA_IDENTITY_ERROR');expect(bucket.puts).toHaveLength(0);});
-  it('maps R2 put failures to an upload-specific safe code',async()=>{const bucket=new FakeBucket();bucket.fail='put';const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(503);expect(await response.json()).toEqual({code:'MEDIA_STORAGE_PUT',message:'Хранилище временно недоступно'});});
+  it('logs safe R2 put diagnostics while preserving the public failure contract',async()=>{
+    const bucket=new FakeBucket();bucket.fail='put';
+    const objectKey=`passport-media/v1/${mediaId}.jpg`;
+    const thrown=new Error(`private r2 detail\nsigned 123456789 bot token never returned secret ${objectKey} ${'x'.repeat(500)}`);thrown.name='R2PutError';bucket.putError=thrown;
+    const consoleError=vi.spyOn(console,'error').mockImplementation(()=>{});
+    try {
+      const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());
+      expect(response.status).toBe(503);
+      const publicBody=await response.json();
+      expect(publicBody).toEqual({code:'MEDIA_STORAGE_PUT',message:'Хранилище временно недоступно'});
+      expect(JSON.stringify(publicBody)).not.toContain('private r2 detail');
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      const serialized=String(consoleError.mock.calls[0][0]),diagnostic=JSON.parse(serialized) as Record<string,unknown>;
+      expect(diagnostic).toMatchObject({event:'passport_media_storage_error',operation:'put',code:'MEDIA_STORAGE_PUT',errorName:'R2PutError'});
+      expect(diagnostic.requestId).toEqual(expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+      expect(typeof diagnostic.errorMessage).toBe('string');
+      expect((diagnostic.errorMessage as string).length).toBeLessThanOrEqual(300);
+      expect(diagnostic.errorMessage).not.toMatch(/[\r\n]/);
+      expect(diagnostic).not.toHaveProperty('stack');
+      expect(serialized).toContain('private r2 detail');
+      expect(serialized).toContain('[REDACTED]');
+      for(const sensitive of ['signed','123456789','bot token','never returned secret',objectKey])expect(serialized).not.toContain(sensitive);
+    } finally { consoleError.mockRestore(); }
+  });
   it('has an isolated deterministic six-per-minute rate limit',async()=>{const bucket=new FakeBucket();let now=1000;const injected=deps({now:()=>now});for(let i=0;i<6;i++)expect((await handleMediaUpload(uploadRequest(),env(bucket),injected)).status).toBe(201);expect(await bodyCode(await handleMediaUpload(uploadRequest(),env(bucket),injected))).toBe('MEDIA_RATE_LIMIT');now+=60_001;expect((await handleMediaUpload(uploadRequest(),env(bucket),injected)).status).toBe(201)});
 });
 

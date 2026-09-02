@@ -24,11 +24,30 @@ const productionDeps=createMediaRouteDeps();
 const CACHE_CONTROL='public, max-age=31536000, immutable';
 const MAX_FILE_BYTES=3*1024*1024;
 const MAX_MULTIPART_BYTES=4*1024*1024;
+const MAX_DIAGNOSTIC_NAME_CHARS=80;
+const MAX_DIAGNOSTIC_MESSAGE_CHARS=300;
 const json=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(code:string,status:number,message:string)=>json({code,message},status);
-const storageError=(operation:'put'|'get')=>{
+const sanitizeDiagnosticText=(value:string,sensitiveValues:string[],maxChars:number)=>{
+  let sanitized=value.replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+  for(const sensitive of sensitiveValues)if(sensitive)sanitized=sanitized.split(sensitive).join('[REDACTED]');
+  return sanitized.slice(0,maxChars);
+};
+const describeStorageException=(caught:unknown,sensitiveValues:string[])=>{
+  let errorName='NonErrorThrown',errorMessage:string;
+  if(caught instanceof Error){errorName=caught.name||'Error';errorMessage=caught.message;}
+  else if(typeof caught==='string'||typeof caught==='number'||typeof caught==='boolean'||typeof caught==='bigint'){errorMessage=String(caught);}
+  else errorMessage=caught===null?'[null]':`[${typeof caught}]`;
+  return {
+    errorName:sanitizeDiagnosticText(errorName,sensitiveValues,MAX_DIAGNOSTIC_NAME_CHARS)||'UnknownError',
+    errorMessage:sanitizeDiagnosticText(errorMessage,sensitiveValues,MAX_DIAGNOSTIC_MESSAGE_CHARS)||'[empty]',
+  };
+};
+type StorageErrorContext={caught:unknown;requestId:string;sensitiveValues:string[]};
+const storageError=(operation:'put'|'get',context?:StorageErrorContext)=>{
   const code=operation==='put'?'MEDIA_STORAGE_PUT':'MEDIA_STORAGE_GET';
-  console.error(JSON.stringify({event:'passport_media_storage_error',operation,code}));
+  const diagnostic=context?describeStorageException(context.caught,context.sensitiveValues):{};
+  console.error(JSON.stringify({event:'passport_media_storage_error',operation,code,...diagnostic,...(context?{requestId:context.requestId}:{})}));
   return error(code,503,'Хранилище временно недоступно');
 };
 
@@ -79,9 +98,12 @@ export async function handleMediaUpload(request:Request,env:MediaEnv,deps=produc
   // Keep the critical upload path aligned with the proven build-apps media service:
   // validate/authenticate first, then write directly to R2. Durable quotas belong in
   // an authoritative account/project store, not in race-prone R2 list scans.
+  const objectKey=mediaKey(identity.mediaId),requestId=crypto.randomUUID();
   try {
-    await env.MEDIA_BUCKET.put(mediaKey(identity.mediaId),buffer,{httpMetadata:{contentType:'image/jpeg',cacheControl:CACHE_CONTROL},customMetadata:{ownerScope:identity.ownerScope,projectScope:identity.projectScope,width:String(dimensions.width),height:String(dimensions.height),createdAt:new Date(now).toISOString()}});
-  } catch { return storageError('put'); }
+    await env.MEDIA_BUCKET.put(objectKey,buffer,{httpMetadata:{contentType:'image/jpeg',cacheControl:CACHE_CONTROL},customMetadata:{ownerScope:identity.ownerScope,projectScope:identity.projectScope,width:String(dimensions.width),height:String(dimensions.height),createdAt:new Date(now).toISOString()}});
+  } catch(caught) {
+    return storageError('put',{caught,requestId,sensitiveValues:[init,userId,env.TELEGRAM_BOT_TOKEN,env.MEDIA_SIGNING_SECRET,objectKey]});
+  }
   return json({mediaId:identity.mediaId,contentType:'image/jpeg',bytes:file.size,...dimensions},201);
 }
 
