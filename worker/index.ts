@@ -2,11 +2,14 @@ import { ZodError } from 'zod';
 import { AIServiceError, createOpenAIPlan } from './openaiPlan';
 import { TelegramInitDataError, validateTelegramInitData } from './telegram/validateTelegramInitData';
 import { getTelegramBotDiagnostics, TelegramBotDiagnosticsError } from './telegram/botDiagnostics';
+import {handleMediaGet,handleMediaUpload,type MediaBucket} from './media/routes';
 
 interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   TELEGRAM_BOT_TOKEN?: string;
+  MEDIA_BUCKET?: MediaBucket;
+  MEDIA_SIGNING_SECRET?: string;
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
 
@@ -15,6 +18,7 @@ const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 12;
 const MAX_BODY_CHARS = 128_000;
+const PASSPORT_MEDIA_PATH_PREFIX='/api/media/passport-covers/';
 
 const json = (value: unknown, status = 200, headers: Record<string,string> = {}) => new Response(JSON.stringify(value), {
   status,
@@ -89,9 +93,11 @@ const handleAIPlan = async (request: Request, env: Env): Promise<Response> => {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === '/api/health' && request.method === 'GET') return json({ ok:true, aiConfigured:Boolean(env.OPENAI_API_KEY), telegramAuthConfigured:Boolean(env.TELEGRAM_BOT_TOKEN) });
+    if (url.pathname === '/api/health' && request.method === 'GET') return json({ ok:true, aiConfigured:Boolean(env.OPENAI_API_KEY), telegramAuthConfigured:Boolean(env.TELEGRAM_BOT_TOKEN), mediaConfigured:Boolean(env.MEDIA_BUCKET && env.MEDIA_SIGNING_SECRET) });
     if (url.pathname === '/api/telegram/diagnostics' && request.method === 'GET') return handleTelegramDiagnostics(env);
     if (url.pathname === '/api/ai/plan') return handleAIPlan(request, env);
+    if (url.pathname === '/api/media/passport-covers' && request.method === 'POST') return handleMediaUpload(request, env);
+    if (url.pathname.startsWith(PASSPORT_MEDIA_PATH_PREFIX) && request.method === 'GET') return handleMediaGet(url.pathname.slice(PASSPORT_MEDIA_PATH_PREFIX.length), env);
     if (url.pathname.startsWith('/api/')) return json({ code:'NOT_FOUND', message:'API route not found' }, 404);
     return env.ASSETS.fetch(request);
   },

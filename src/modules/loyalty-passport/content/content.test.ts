@@ -1,3 +1,4 @@
+import {PassportCoverReferenceSchema} from '../schema';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe,expect,it} from 'vitest';
@@ -20,3 +21,5 @@ describe('Passport authored content view model',()=>{
  it.each(passportPresentationRegistry.map(x=>x.id))('renders authored content in %s',id=>{const definition=passportPresentationRegistry.find(x=>x.id===id)!;const markup=renderToStaticMarkup(createElement(definition.Renderer,{viewModel:buildPassportViewModel({...config,balance:1}),presentation:normalizePassportPresentation({visualVariant:id})}));expect(markup).toContain('Диагностика');expect(markup).toContain('lucide-wrench');});
  it.each(passportPresentationRegistry.map(x=>x.id))('meaningfully consumes the authored cover in %s',id=>{const definition=passportPresentationRegistry.find(x=>x.id===id)!;const markup=renderToStaticMarkup(createElement(definition.Renderer,{viewModel:buildPassportViewModel({...config,balance:1}),presentation:normalizePassportPresentation({visualVariant:id})}));expect(markup).toContain('data-cover-asset="repair-tools"');});
 });
+
+describe('Passport media cover schema',()=>{const mediaId='m1_abcdefghijklmnop_qrstuvwxyzABCDEF_123e4567-e89b-42d3-a456-426614174000';it('accepts catalog and media covers',()=>{expect(PassportCoverReferenceSchema.safeParse({source:'catalog',assetId:'gift-box'}).success).toBe(true);expect(PassportCoverReferenceSchema.safeParse({source:'media',mediaId}).success).toBe(true)});it.each([{source:'media',mediaId:'https://x.test/a.jpg'},{source:'external',url:'https://x.test/a.jpg'},{source:'media',mediaId:'m1_bad'}])('rejects unsafe cover %j',cover=>expect(PassportCoverReferenceSchema.safeParse(cover).success).toBe(false));});
