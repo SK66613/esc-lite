@@ -1,0 +1,4 @@
+import {Camera,Car,Check,Coffee,Crown,Droplet,Dumbbell,Flame,Gift,Gem,Heart,Leaf,Milestone,PawPrint,Scissors,Sparkles,Star,Ticket,Utensils,Wrench} from 'lucide-react';
+import {PASSPORT_STAMP_ICON_KEYS,type PassportStampIconKey} from './options';
+const registry:Record<PassportStampIconKey,typeof Star>={star:Star,gift:Gift,coffee:Coffee,sparkles:Sparkles,tool:Wrench,scissors:Scissors,heart:Heart,crown:Crown,flame:Flame,gem:Gem,ticket:Ticket,camera:Camera,leaf:Leaf,paw:PawPrint,fitness:Dumbbell,car:Car,food:Utensils,drop:Droplet,check:Check,milestone:Milestone};
+export function PassportStampIcon({iconKey,className}:{iconKey?:PassportStampIconKey|string|null;className?:string}){const safe=PASSPORT_STAMP_ICON_KEYS.includes(iconKey as PassportStampIconKey)?iconKey as PassportStampIconKey:'star';const Icon=registry[safe];return <Icon className={className} aria-hidden="true"/>}

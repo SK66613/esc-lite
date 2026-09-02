@@ -6,6 +6,7 @@ import { AI_PLAN_JSON_SCHEMA } from './aiPlanJsonSchema';
 import { SERVER_ALLOWED_CAPABILITY_IDS } from '../src/ai/capabilities/allowedCapabilityIds';
 import { SERVER_MODULE_CONFIG_OPTION_POLICY } from '../src/ai/capabilities/serverConfigOptionPolicy';
 import { PASSPORT_VISUAL_VARIANTS, passportVariantSupports, type PassportPresentationAxis, type PassportVisualVariant } from '../src/modules/loyalty-passport/presentation/options';
+import { PassportStampContentMapSchema } from '../src/modules/loyalty-passport/schema';
 
 export const DEFAULT_AI_MODEL = 'gpt-5.6-terra';
 
@@ -58,6 +59,15 @@ export function validatePlanAgainstCapabilities(plan: AIPlan, capabilities: Vali
       if (!capability) throw new AIServiceError('AI_INVALID_PLAN', 502, `AI предложил недоступный модуль: ${action.payload.moduleType}`);
       if (action.type === 'patch_module_config') {
         assertPatchKeys(action.payload.patch, capability.defaultConfig, action.payload.moduleType);
+        if(action.payload.moduleType==='loyalty_passport'&&'stampContent' in action.payload.patch){
+          const parsed=PassportStampContentMapSchema.safeParse(action.payload.patch.stampContent);
+          if(!parsed.success)throw new AIServiceError('AI_INVALID_PLAN',502,'AI предложил некорректное содержание этапов');
+          const patchedGoal=action.payload.patch.goal;
+          const currentConfig=project?.modules.find(module=>module.type==='loyalty_passport')?.config;
+          const currentGoal=currentConfig&&typeof currentConfig==='object'&&!Array.isArray(currentConfig)?(currentConfig as Record<string,unknown>).goal:undefined;
+          const effectiveGoal=typeof patchedGoal==='number'&&Number.isInteger(patchedGoal)&&patchedGoal>=1&&patchedGoal<=30?patchedGoal:typeof currentGoal==='number'&&Number.isInteger(currentGoal)&&currentGoal>=1&&currentGoal<=30?currentGoal:6;
+          if(Object.keys(parsed.data).some(position=>Number(position)>effectiveGoal))throw new AIServiceError('AI_INVALID_PLAN',502,'AI предложил этап выше текущей цели');
+        }
         const policy=SERVER_MODULE_CONFIG_OPTION_POLICY[action.payload.moduleType as keyof typeof SERVER_MODULE_CONFIG_OPTION_POLICY];
         if(policy&&'presentation' in action.payload.patch){
           const presentation=action.payload.patch.presentation;

@@ -6,6 +6,7 @@ import { LoyaltyPassportConfigSchema, createLoyaltyConfig } from './loyalty-pass
 import { LoyaltyPassportPreview } from './loyalty-passport/LoyaltyPassportPreview';
 import { LoyaltyPassportInspector } from './loyalty-passport/LoyaltyPassportInspector';
 import { buildPassportPresentationAICapabilities, passportPresentationConfigOptions } from './loyalty-passport/presentation/registry';
+import {PASSPORT_STAMP_ICON_KEYS} from './loyalty-passport/content/options';
 import { OffersConfigSchema, createOffersConfig } from './offers-placeholder/schema';
 import { OffersPreview } from './offers-placeholder/OffersPreview';
 import { OffersInspector } from './offers-placeholder/OffersInspector';
@@ -26,7 +27,9 @@ interface TypedModuleDefinition<TSchema extends ZodTypeAny> {
 
 export interface ModuleAIConfigOption { values: readonly (string|number|boolean)[]; description?:string }
 export interface ModuleAIPresentationVariant { id:string;title:string;description:string;purpose?:string;keywords?:readonly string[];bestFor?:readonly string[];supports:readonly string[] }
-export interface ModuleAIMetadata { purpose: string; examples?: string[]; keywords?: string[]; configOptions?:Record<string,ModuleAIConfigOption>;presentationVariants?:readonly ModuleAIPresentationVariant[] }
+export interface ModuleAIConfigStructureField {type:'string';description?:string;nullable?:boolean;maxLength?:number;values?:readonly (string|number|boolean)[]}
+export interface ModuleAIConfigStructure {kind:'position_map';description:string;keyRange:{min:number;max:number};fields:Record<string,ModuleAIConfigStructureField>}
+export interface ModuleAIMetadata { purpose: string; examples?: string[]; keywords?: string[]; configOptions?:Record<string,ModuleAIConfigOption>;presentationVariants?:readonly ModuleAIPresentationVariant[];configStructures?:Record<string,ModuleAIConfigStructure> }
 
 export interface ModuleDefinition {
   type: string; title: string; description: string; icon: LucideIcon; version: number;
@@ -59,7 +62,7 @@ export const moduleRegistry = {
     description: 'Визиты, прогресс и награда', icon: CreditCard, version: 1,
     createDefaultConfig: createLoyaltyConfig, ConfigSchema: LoyaltyPassportConfigSchema,
     PreviewComponent: LoyaltyPassportPreview, InspectorComponent: LoyaltyPassportInspector,
-    ai:{purpose:'Программа лояльности по визитам или покупкам',examples:['Каждый шестой кофе бесплатно'],keywords:['бонус','лояльность','кофе в подарок','штампы','визиты'],configOptions:passportPresentationConfigOptions,presentationVariants:buildPassportPresentationAICapabilities()},
+    ai:{purpose:'Программа лояльности по визитам или покупкам',examples:['Каждый шестой кофе бесплатно'],keywords:['бонус','лояльность','кофе в подарок','штампы','визиты'],configOptions:passportPresentationConfigOptions,presentationVariants:buildPassportPresentationAICapabilities(),configStructures:{stampContent:{kind:'position_map',description:'Необязательное содержание позиций; goal определяет видимое количество',keyRange:{min:1,max:30},fields:{title:{type:'string',description:'Название этапа',nullable:true,maxLength:60},iconKey:{type:'string',description:'Иконка из безопасного словаря',nullable:true,values:PASSPORT_STAMP_ICON_KEYS}}}}},
   }),
   offers_placeholder: defineModule({
     type: 'offers_placeholder', title: 'Offers',

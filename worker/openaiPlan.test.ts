@@ -56,3 +56,12 @@ describe('server-owned variant support matrix',()=>{
  it('uses the target variant from the same patch',async()=>await expect(run(configuredRequest('minimal_counter'),{visualVariant:'collection_gallery',columns:4,imageAspect:'portrait'})).resolves.toBeDefined());
  it('ignores tampered client support metadata',async()=>{const req=configuredRequest('minimal_counter') as any;req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.presentationVariants.find((v:any)=>v.id==='minimal_counter').supports.push('columns');await expect(run(req,{columns:4})).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
 });
+
+describe('server-owned Passport stamp policy',()=>{
+ const action=(patch:Record<string,unknown>)=>({type:'patch_module_config',payload:{moduleType:'loyalty_passport',patch}});
+ const run=(patch:Record<string,unknown>,req=request())=>createOpenAIPlan(req,{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([action(patch)]))});
+ it('accepts sparse content and positions enabled by a goal raised in the patch',async()=>{await expect(run({stampContent:{'2':{title:'Покраска'}}})).resolves.toBeDefined();await expect(run({goal:7,stampContent:{'7':{iconKey:'gift'}}})).resolves.toBeDefined();});
+ it.each([{stampContent:[]},{stampContent:'bad'},{stampContent:{'0':{title:'x'}}},{stampContent:{'31':{title:'x'}}},{stampContent:{foo:{title:'x'}}},{stampContent:{'1':{}}},{stampContent:{'1':{iconKey:'custom_svg'}}}])('rejects malformed server-side content %j',async patch=>await expect(run(patch as any)).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('rejects a position above current goal',async()=>await expect(run({stampContent:{'7':{title:'Будущее'}}})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('cannot be widened by tampered icon metadata',async()=>{const req=request() as any;req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.configStructures.stampContent.fields.iconKey.values.push('custom_svg');await expect(run({stampContent:{'1':{iconKey:'custom_svg'}}},req)).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
+});
