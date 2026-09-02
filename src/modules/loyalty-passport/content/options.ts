@@ -1,0 +1,3 @@
+export const PASSPORT_STAMP_ICON_KEYS = ['star','gift','coffee','sparkles','tool','scissors','heart','crown','flame','gem','ticket','camera','leaf','paw','fitness','car','food','drop','check','milestone'] as const;
+export type PassportStampIconKey = typeof PASSPORT_STAMP_ICON_KEYS[number];
+export const PASSPORT_STAMP_ICON_LABELS:Record<PassportStampIconKey,string>={star:'Звезда',gift:'Подарок',coffee:'Кофе',sparkles:'Искры',tool:'Инструмент',scissors:'Ножницы',heart:'Сердце',crown:'Корона',flame:'Огонь',gem:'Кристалл',ticket:'Билет',camera:'Камера',leaf:'Лист',paw:'Лапа',fitness:'Спорт',car:'Авто',food:'Еда',drop:'Капля',check:'Готово',milestone:'Этап'};
