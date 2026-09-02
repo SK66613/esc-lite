@@ -24,11 +24,29 @@ const productionDeps=createMediaRouteDeps();
 const CACHE_CONTROL='public, max-age=31536000, immutable';
 const MAX_FILE_BYTES=3*1024*1024;
 const MAX_MULTIPART_BYTES=4*1024*1024;
+const MAX_ERROR_MESSAGE_LENGTH=300;
 const json=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(code:string,status:number,message:string)=>json({code,message},status);
-const storageError=(operation:'put'|'get')=>{
+const sanitizeDiagnosticText=(value:string,sensitiveValues:string[],maxLength:number)=>{
+  let sanitized=value;
+  for(const sensitive of sensitiveValues.filter(Boolean).sort((a,b)=>b.length-a.length))sanitized=sanitized.split(sensitive).join('[REDACTED]');
+  return sanitized.replace(/[\r\n]+/g,' ').slice(0,maxLength);
+};
+const safeErrorDiagnostic=(caught:unknown,sensitiveValues:string[])=>{
+  const errorName=caught instanceof Error?caught.name:'NonErrorThrown';
+  let errorMessage:string;
+  if(caught instanceof Error)errorMessage=caught.message;
+  else if(typeof caught==='string'||typeof caught==='number'||typeof caught==='boolean'||typeof caught==='bigint')errorMessage=String(caught);
+  else if(caught===null)errorMessage='null';
+  else errorMessage=`Thrown value of type ${typeof caught}`;
+  return {
+    errorName:sanitizeDiagnosticText(errorName,sensitiveValues,80),
+    errorMessage:sanitizeDiagnosticText(errorMessage,sensitiveValues,MAX_ERROR_MESSAGE_LENGTH),
+  };
+};
+const storageError=(operation:'put'|'get',diagnostic?:{errorName:string;errorMessage:string;requestId:string})=>{
   const code=operation==='put'?'MEDIA_STORAGE_PUT':'MEDIA_STORAGE_GET';
-  console.error(JSON.stringify({event:'passport_media_storage_error',operation,code}));
+  console.error(JSON.stringify({event:'passport_media_storage_error',operation,code,...diagnostic}));
   return error(code,503,'Хранилище временно недоступно');
 };
 
@@ -79,9 +97,13 @@ export async function handleMediaUpload(request:Request,env:MediaEnv,deps=produc
   // Keep the critical upload path aligned with the proven build-apps media service:
   // validate/authenticate first, then write directly to R2. Durable quotas belong in
   // an authoritative account/project store, not in race-prone R2 list scans.
+  const requestId=crypto.randomUUID();
   try {
     await env.MEDIA_BUCKET.put(mediaKey(identity.mediaId),buffer,{httpMetadata:{contentType:'image/jpeg',cacheControl:CACHE_CONTROL},customMetadata:{ownerScope:identity.ownerScope,projectScope:identity.projectScope,width:String(dimensions.width),height:String(dimensions.height),createdAt:new Date(now).toISOString()}});
-  } catch { return storageError('put'); }
+  } catch(caught:unknown) {
+    const diagnostic=safeErrorDiagnostic(caught,[init,userId,env.TELEGRAM_BOT_TOKEN,env.MEDIA_SIGNING_SECRET]);
+    return storageError('put',{...diagnostic,requestId});
+  }
   return json({mediaId:identity.mediaId,contentType:'image/jpeg',bytes:file.size,...dimensions},201);
 }
 

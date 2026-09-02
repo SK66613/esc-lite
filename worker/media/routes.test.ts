@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMediaRouteDeps, handleMediaDiagnostics, handleMediaGet, handleMediaUpload, type MediaBucket } from './routes';
 const mediaId='m1_abcdefghijklmnop_qrstuvwxyzABCDEF_123e4567-e89b-42d3-a456-426614174000';
 const structuralJPEG=new Uint8Array([0xff,0xd8,0xff,0xc0,0,17,8,0,2,0,3,3,1,0x11,0,2,0x11,0,3,0x11,0,0xff,0xda,0,8,1,1,0,0,63,0,1,2,0xff,0xd9]);
@@ -12,6 +12,7 @@ const deps=(overrides:Parameters<typeof createMediaRouteDeps>[0]={})=>createMedi
 const env=(bucket=new FakeBucket())=>({MEDIA_BUCKET:bucket,MEDIA_SIGNING_SECRET:'never returned secret',TELEGRAM_BOT_TOKEN:'bot token'});
 const uploadRequest=(options:{origin?:string;auth?:boolean;projectId?:string;files?:Blob[];raw?:boolean}={})=>{const headers=new Headers();if(options.origin)headers.set('origin',options.origin);if(options.auth!==false)headers.set('X-Telegram-Init-Data','signed');if(options.raw)return new Request('https://app.test/api/media/passport-covers',{method:'POST',headers,body:'not multipart'});const form=new FormData();for(const file of options.files??[new Blob([structuralJPEG],{type:'image/jpeg'})])form.append('file',file,'cover.jpg');form.append('projectId',options.projectId??'project-123');return new Request('https://app.test/api/media/passport-covers',{method:'POST',headers,body:form});};
 const bodyCode=async(response:Response)=>(await response.json() as any).code;
+afterEach(()=>vi.restoreAllMocks());
 
 describe('Passport media diagnostics',()=>{
   it('reports configured identity and R2 list without exposing internals',async()=>{const bucket=new FakeBucket();const response=await handleMediaDiagnostics(env(bucket),deps());expect(response.status).toBe(200);expect(await response.json()).toEqual({ok:true,configured:true,identity:true,storageList:true});expect(bucket.lists).toEqual([{prefix:'passport-media/v1/',limit:1}]);});
@@ -33,7 +34,31 @@ describe('Passport media upload route',()=>{
   it('writes exact key and safe metadata without R2 list scans',async()=>{const bucket=new FakeBucket();const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(201);expect(bucket.puts).toEqual([`passport-media/v1/${mediaId}.jpg`]);const stored=bucket.objects.get(bucket.puts[0])!;expect(stored.options.httpMetadata).toEqual({contentType:'image/jpeg',cacheControl:'public, max-age=31536000, immutable'});expect(stored.options.customMetadata).toMatchObject({ownerScope:'abcdefghijklmnop',projectScope:'qrstuvwxyzABCDEF',width:'3',height:'2'});expect(Object.keys(await response.json())).toEqual(['mediaId','contentType','bytes','width','height']);expect(bucket.lists).toHaveLength(0);});
   it('uploads even when R2 list is unavailable because list is diagnostics-only',async()=>{const bucket=new FakeBucket();bucket.fail='list';const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(201);expect(bucket.puts).toEqual([`passport-media/v1/${mediaId}.jpg`]);expect(bucket.lists).toHaveLength(0);});
   it('returns a safe identity error before writing',async()=>{const bucket=new FakeBucket();const response=await handleMediaUpload(uploadRequest(),env(bucket),deps({createIdentity:async()=>{throw new Error('secret detail')}}));expect(response.status).toBe(503);expect(await bodyCode(response)).toBe('MEDIA_IDENTITY_ERROR');expect(bucket.puts).toHaveLength(0);});
-  it('maps R2 put failures to an upload-specific safe code',async()=>{const bucket=new FakeBucket();bucket.fail='put';const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());expect(response.status).toBe(503);expect(await response.json()).toEqual({code:'MEDIA_STORAGE_PUT',message:'Хранилище временно недоступно'});});
+  it('logs safe structured diagnostics while keeping R2 put failures private',async()=>{
+    const rawUserId='123456789',initData='signed',botToken='bot token',signingSecret='never returned secret';
+    const privatePrefix='private R2 failure';
+    const privateMessage=`${privatePrefix}\r\nuser=${rawUserId} init=${initData} bot=${botToken} signing=${signingSecret} ${'x'.repeat(400)}`;
+    const bucket=new FakeBucket();
+    bucket.put=async()=>{throw new TypeError(privateMessage)};
+    const errorSpy=vi.spyOn(console,'error').mockImplementation(()=>{});
+
+    const response=await handleMediaUpload(uploadRequest(),env(bucket),deps());
+    const responseText=await response.text();
+
+    expect(response.status).toBe(503);
+    expect(JSON.parse(responseText)).toEqual({code:'MEDIA_STORAGE_PUT',message:'Хранилище временно недоступно'});
+    expect(responseText).not.toContain(privatePrefix);
+    expect(errorSpy).toHaveBeenCalledOnce();
+    const serializedLog=String(errorSpy.mock.calls[0][0]);
+    const diagnostic=JSON.parse(serializedLog);
+    expect(diagnostic).toMatchObject({event:'passport_media_storage_error',operation:'put',code:'MEDIA_STORAGE_PUT',errorName:'TypeError'});
+    expect(diagnostic.requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(diagnostic.errorMessage).toContain(privatePrefix);
+    expect(diagnostic.errorMessage).toContain('[REDACTED]');
+    expect(diagnostic.errorMessage.length).toBeLessThanOrEqual(300);
+    expect(diagnostic.errorMessage).not.toMatch(/[\r\n]/);
+    for(const sensitive of [rawUserId,initData,botToken,signingSecret])expect(serializedLog).not.toContain(sensitive);
+  });
   it('has an isolated deterministic six-per-minute rate limit',async()=>{const bucket=new FakeBucket();let now=1000;const injected=deps({now:()=>now});for(let i=0;i<6;i++)expect((await handleMediaUpload(uploadRequest(),env(bucket),injected)).status).toBe(201);expect(await bodyCode(await handleMediaUpload(uploadRequest(),env(bucket),injected))).toBe('MEDIA_RATE_LIMIT');now+=60_001;expect((await handleMediaUpload(uploadRequest(),env(bucket),injected)).status).toBe(201)});
 });
 
