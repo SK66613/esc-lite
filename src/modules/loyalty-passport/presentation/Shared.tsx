@@ -1,5 +1,6 @@
-import { Gift, QrCode } from 'lucide-react'; import type { PassportRendererProps } from './types';
+import { Gift, QrCode } from 'lucide-react'; import {PassportCoverImage} from '../content/coverRegistry'; import type { PassportRendererProps,PassportStamp } from './types';
 export const Header=({viewModel:v,presentation:p}:PassportRendererProps)=><header className={`passport-header passport-header--${p.headerMode}`}><div><span className="passport-eyebrow">Программа лояльности</span><h2>{v.name}</h2><p>{v.description}</p></div><Gift aria-hidden="true"/></header>;
 export const Progress=({viewModel:v,presentation:p}:PassportRendererProps)=>!v.showProgress||p.progressMode==='hidden'?null:<div className={`passport-progress passport-progress--${p.progressMode}`} aria-label={`Прогресс: ${v.filled} из ${v.goal}`}><span>{v.filled} / {v.goal}</span><div><i style={{width:`${v.progressPercent}%`}}/></div></div>;
 export const Reward=({viewModel:v}:{viewModel:PassportRendererProps['viewModel']})=><div className="passport-reward"><small>Награда</small><strong>{v.reward}</strong></div>;
 export const QRButton=()=> <button className="passport-qr" type="button"><QrCode aria-hidden="true"/>Показать QR для начисления</button>;
+export const Cover=({stamp,fallback=false,className='passport-cover'}:{stamp:PassportStamp;fallback?:boolean;className?:string})=>stamp.cover||fallback?<PassportCoverImage className={className} assetId={stamp.cover?.assetId??'generic-star'} alt="" aria-hidden="true"/>:null;
