@@ -23,6 +23,7 @@ export const createMediaRouteDeps = (overrides:Partial<MediaRouteDeps> = {}):Med
 const productionDeps=createMediaRouteDeps();
 const CACHE_CONTROL='public, max-age=31536000, immutable';
 const MAX_FILE_BYTES=3*1024*1024;
+const MAX_MULTIPART_BYTES=4*1024*1024;
 const json=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const error=(code:string,status:number,message:string)=>json({code,message},status);
 const storageError=(operation:string)=>{console.error(JSON.stringify({event:'passport_media_storage_error',operation,code:'MEDIA_STORAGE_ERROR'}));return error('MEDIA_STORAGE_ERROR',503,'Хранилище временно недоступно');};
@@ -41,6 +42,8 @@ export async function handleMediaUpload(request:Request,env:MediaEnv,deps=produc
   if(rate&&rate.reset>now&&rate.count>=6)return error('MEDIA_RATE_LIMIT',429,'Слишком много загрузок');
   if(!rate||rate.reset<=now)deps.rates.set(userId,{count:1,reset:now+60_000});else rate.count++;
   if(!request.headers.get('content-type')?.toLowerCase().startsWith('multipart/form-data;'))return error('MEDIA_INVALID_FORM',400,'Ожидается multipart/form-data');
+  const declaredLength=request.headers.get('content-length');
+  if(declaredLength&&/^\d+$/.test(declaredLength)&&Number(declaredLength)>MAX_MULTIPART_BYTES)return error('MEDIA_FILE_TOO_LARGE',413,'Файл слишком большой');
   let form:FormData;try{form=await request.formData();}catch{return error('MEDIA_INVALID_FORM',400,'Некорректная форма');}
   const files=form.getAll('file');if(files.length!==1||!(files[0] instanceof File))return error('MEDIA_INVALID_FILE',400,'Нужен один файл');
   const file=files[0],projectId=form.get('projectId');
