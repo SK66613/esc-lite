@@ -65,3 +65,12 @@ describe('server-owned Passport stamp policy',()=>{
  it('rejects a position above current goal',async()=>await expect(run({stampContent:{'7':{title:'Будущее'}}})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
  it('cannot be widened by tampered icon metadata',async()=>{const req=request() as any;req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.configStructures.stampContent.fields.iconKey.values.push('custom_svg');await expect(run({stampContent:{'1':{iconKey:'custom_svg'}}},req)).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
 });
+
+describe('server-owned Passport cover policy',()=>{
+ const action=(patch:Record<string,unknown>)=>({type:'patch_module_config',payload:{moduleType:'loyalty_passport',patch}});
+ const run=(patch:Record<string,unknown>,req=request())=>createOpenAIPlan(req,{apiKey:'secret',fetchImpl:async()=>responseWithPlan(modelPlan([action(patch)]))});
+ it('accepts valid cover patches and a cover enabled by a raised goal',async()=>{await expect(run({stampContent:{'2':{cover:{source:'catalog',assetId:'repair-tools'}}}})).resolves.toBeDefined();await expect(run({goal:7,stampContent:{'7':{cover:{source:'catalog',assetId:'gift-box'}}}})).resolves.toBeDefined();});
+ it.each([{source:'external',assetId:'gift-box'},{source:'catalog',assetId:'custom-cover'},{source:'catalog',assetId:'gift-box',url:'x'}])('rejects invalid cover %j',async cover=>await expect(run({stampContent:{'2':{cover}}})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('rejects cover positions above effective goal',async()=>await expect(run({stampContent:{'7':{cover:{source:'catalog',assetId:'gift-box'}}}})).rejects.toMatchObject({code:'AI_INVALID_PLAN'}));
+ it('cannot be widened by tampered client cover metadata',async()=>{const req=request() as any;req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.coverAssets.push({id:'custom-cover',title:'Custom',category:'custom',keywords:['custom']});req.capabilities.modules.find((m:any)=>m.type==='loyalty_passport').ai.configStructures.stampContent.fields.cover.fields.assetId.values.push('custom-cover');await expect(run({stampContent:{'2':{cover:{source:'catalog',assetId:'custom-cover'}}}},req)).rejects.toMatchObject({code:'AI_INVALID_PLAN'});});
+});

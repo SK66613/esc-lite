@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PASSPORT_COLUMNS, PASSPORT_HEADER_MODES, PASSPORT_IMAGE_ASPECTS, PASSPORT_PROGRESS_MODES, PASSPORT_STAMP_SHAPES, PASSPORT_VISUAL_VARIANTS } from './presentation/options';
 import { PASSPORT_STAMP_ICON_KEYS } from './content/options';
+import { PASSPORT_COVER_ASSET_IDS } from './content/coverCatalog';
 
 export const PassportVisualVariantSchema = z.enum(PASSPORT_VISUAL_VARIANTS);
 export const PassportHeaderModeSchema = z.enum(PASSPORT_HEADER_MODES);
@@ -8,7 +9,9 @@ export const PassportStampShapeSchema = z.enum(PASSPORT_STAMP_SHAPES);
 export const PassportProgressModeSchema = z.enum(PASSPORT_PROGRESS_MODES);
 export const PassportImageAspectSchema = z.enum(PASSPORT_IMAGE_ASPECTS);
 export const PassportStampIconKeySchema=z.enum(PASSPORT_STAMP_ICON_KEYS);
-export const PassportStampContentItemSchema=z.object({title:z.string().trim().min(1).max(60).nullable().optional(),iconKey:PassportStampIconKeySchema.nullable().optional()}).strict().refine(value=>value.title!==undefined||value.iconKey!==undefined,'Укажите title или iconKey');
+export const PassportCoverAssetIdSchema=z.enum(PASSPORT_COVER_ASSET_IDS);
+export const PassportCoverReferenceSchema=z.object({source:z.literal('catalog'),assetId:PassportCoverAssetIdSchema}).strict();
+export const PassportStampContentItemSchema=z.object({title:z.string().trim().min(1).max(60).nullable().optional(),iconKey:PassportStampIconKeySchema.nullable().optional(),cover:PassportCoverReferenceSchema.nullable().optional()}).strict().refine(value=>value.title!==undefined||value.iconKey!==undefined||value.cover!==undefined,'Укажите title, iconKey или cover');
 export const PassportStampContentMapSchema=z.record(z.string().regex(/^(?:[1-9]|[12][0-9]|30)$/),PassportStampContentItemSchema.nullable());
 
 export const LoyaltyPassportPresentationSchema = z.object({
