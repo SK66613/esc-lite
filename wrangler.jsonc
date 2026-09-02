@@ -26,8 +26,7 @@
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "esc-lite-media",
-      "preview_bucket_name": "esc-lite-media-preview"
+      "bucket_name": "esc-lite-media"
     }
   ]
 }
