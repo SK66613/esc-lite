@@ -87,3 +87,28 @@ Vite использует относительный `base`, поэтому со
 ## Passport media infrastructure
 
 Passport uploads require the `MEDIA_BUCKET` R2 binding and a stable, high-entropy `MEDIA_SIGNING_SECRET`. Rotating `MEDIA_SIGNING_SECRET` changes future owner/project quota scopes and therefore requires a deliberate migration plan; never derive it from another credential or expose it to the browser.
+
+Provision both R2 buckets before enabling uploads:
+
+```text
+production: esc-lite-media
+preview:    esc-lite-media-preview
+```
+
+`wrangler.jsonc` is the production configuration and binds `MEDIA_BUCKET` to `esc-lite-media`. `wrangler.preview.jsonc` is the non-production Workers Builds configuration and binds the same Worker binding to `esc-lite-media-preview`.
+
+Cloudflare Workers Builds must use this **Non-production branch deploy command**:
+
+```bash
+npm run deploy:preview
+```
+
+which resolves to:
+
+```bash
+wrangler versions upload --config wrangler.preview.jsonc
+```
+
+Do not rely on `preview_bucket_name` for PR isolation: Wrangler documents that field for `wrangler dev`. Production deployment continues to use `npm run deploy` / `wrangler deploy` with `wrangler.jsonc`.
+
+The Worker also requires the existing `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `MEDIA_SIGNING_SECRET` secrets before `wrangler deploy` or `wrangler versions upload` can succeed.
