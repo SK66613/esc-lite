@@ -28,5 +28,14 @@
       "binding": "MEDIA_BUCKET",
       "bucket_name": "esc-lite-media-preview"
     }
-  ]
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    }
+  }
 }
