@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "esc-lite",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-31",
+  "workers_dev": true,
+  "preview_urls": true,
+  "secrets": {
+    "required": [
+      "OPENAI_API_KEY",
+      "TELEGRAM_BOT_TOKEN",
+      "MEDIA_SIGNING_SECRET"
+    ]
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "build": {
+    "command": "npm run build"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "esc-lite-media-preview"
+    }
+  ]
+}
