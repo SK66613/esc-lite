@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMediaRouteDeps, handleMediaGet, handleMediaUpload, type MediaBucket } from './routes';
+import { createMediaRouteDeps, handleMediaDiagnostics, handleMediaGet, handleMediaUpload, type MediaBucket } from './routes';
 const mediaId='m1_abcdefghijklmnop_qrstuvwxyzABCDEF_123e4567-e89b-42d3-a456-426614174000';
 const structuralJPEG=new Uint8Array([0xff,0xd8,0xff,0xc0,0,17,8,0,2,0,3,3,1,0x11,0,2,0x11,0,3,0x11,0,0xff,0xda,0,8,1,1,0,0,63,0,1,2,0xff,0xd9]);
 class FakeBucket implements MediaBucket {
@@ -12,6 +12,12 @@ const deps=(overrides:Parameters<typeof createMediaRouteDeps>[0]={})=>createMedi
 const env=(bucket=new FakeBucket())=>({MEDIA_BUCKET:bucket,MEDIA_SIGNING_SECRET:'never returned secret',TELEGRAM_BOT_TOKEN:'bot token'});
 const uploadRequest=(options:{origin?:string;auth?:boolean;projectId?:string;files?:Blob[];raw?:boolean}={})=>{const headers=new Headers();if(options.origin)headers.set('origin',options.origin);if(options.auth!==false)headers.set('X-Telegram-Init-Data','signed');if(options.raw)return new Request('https://app.test/api/media/passport-covers',{method:'POST',headers,body:'not multipart'});const form=new FormData();for(const file of options.files??[new Blob([structuralJPEG],{type:'image/jpeg'})])form.append('file',file,'cover.jpg');form.append('projectId',options.projectId??'project-123');return new Request('https://app.test/api/media/passport-covers',{method:'POST',headers,body:form});};
 const bodyCode=async(response:Response)=>(await response.json() as any).code;
+
+describe('Passport media diagnostics',()=>{
+  it('reports configured identity and R2 list without exposing internals',async()=>{const bucket=new FakeBucket();const response=await handleMediaDiagnostics(env(bucket),deps());expect(response.status).toBe(200);expect(await response.json()).toEqual({ok:true,configured:true,identity:true,storageList:true});expect(bucket.lists).toEqual([{prefix:'passport-media/v1/',limit:1}]);});
+  it('reports identity failure safely',async()=>{const response=await handleMediaDiagnostics(env(),deps({createIdentity:async()=>{throw new Error('secret detail')}}));expect(response.status).toBe(503);expect(await response.json()).toEqual({ok:false,configured:true,identity:false,storageList:false,code:'MEDIA_DIAGNOSTIC_IDENTITY'});});
+  it('reports R2 list failure safely',async()=>{const bucket=new FakeBucket();bucket.fail='list';const response=await handleMediaDiagnostics(env(bucket),deps());expect(response.status).toBe(503);expect(await response.json()).toEqual({ok:false,configured:true,identity:true,storageList:false,code:'MEDIA_DIAGNOSTIC_STORAGE_LIST'});});
+});
 
 describe('Passport media upload route',()=>{
   it('requires Telegram auth',async()=>{const bucket=new FakeBucket();const response=await handleMediaUpload(uploadRequest({auth:false}),env(bucket),deps());expect(response.status).toBe(401);expect(await bodyCode(response)).toBe('TELEGRAM_AUTH_REQUIRED');expect(bucket.puts).toHaveLength(0)});

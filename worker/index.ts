@@ -2,7 +2,7 @@ import { ZodError } from 'zod';
 import { AIServiceError, createOpenAIPlan } from './openaiPlan';
 import { TelegramInitDataError, validateTelegramInitData } from './telegram/validateTelegramInitData';
 import { getTelegramBotDiagnostics, TelegramBotDiagnosticsError } from './telegram/botDiagnostics';
-import {handleMediaGet,handleMediaUpload,type MediaBucket} from './media/routes';
+import {handleMediaDiagnostics,handleMediaGet,handleMediaUpload,type MediaBucket} from './media/routes';
 
 interface Env {
   OPENAI_API_KEY?: string;
@@ -95,6 +95,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/health' && request.method === 'GET') return json({ ok:true, aiConfigured:Boolean(env.OPENAI_API_KEY), telegramAuthConfigured:Boolean(env.TELEGRAM_BOT_TOKEN), mediaConfigured:Boolean(env.MEDIA_BUCKET && env.MEDIA_SIGNING_SECRET) });
     if (url.pathname === '/api/telegram/diagnostics' && request.method === 'GET') return handleTelegramDiagnostics(env);
+    if (url.pathname === '/api/media/diagnostics' && request.method === 'GET') return handleMediaDiagnostics(env);
     if (url.pathname === '/api/ai/plan') return handleAIPlan(request, env);
     if (url.pathname === '/api/media/passport-covers' && request.method === 'POST') return handleMediaUpload(request, env);
     if (url.pathname.startsWith(PASSPORT_MEDIA_PATH_PREFIX) && request.method === 'GET') return handleMediaGet(url.pathname.slice(PASSPORT_MEDIA_PATH_PREFIX.length), env);

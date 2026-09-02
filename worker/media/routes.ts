@@ -28,6 +28,23 @@ const json=(body:unknown,status:number)=>new Response(JSON.stringify(body),{stat
 const error=(code:string,status:number,message:string)=>json({code,message},status);
 const storageError=(operation:string)=>{console.error(JSON.stringify({event:'passport_media_storage_error',operation,code:'MEDIA_STORAGE_ERROR'}));return error('MEDIA_STORAGE_ERROR',503,'Хранилище временно недоступно');};
 
+/** Safe runtime probe: never exposes bucket names, secrets, identities, keys or object data. */
+export async function handleMediaDiagnostics(env:MediaEnv,deps=productionDeps) {
+  if(!env.MEDIA_BUCKET||!env.MEDIA_SIGNING_SECRET)return json({ok:false,configured:false,identity:false,storageList:false,code:'MEDIA_DIAGNOSTIC_NOT_CONFIGURED'},503);
+  try {
+    const identity=await deps.createIdentity(env.MEDIA_SIGNING_SECRET,'diagnostic-user','diagnostic-project');
+    if(!isMediaId(identity.mediaId))return json({ok:false,configured:true,identity:false,storageList:false,code:'MEDIA_DIAGNOSTIC_IDENTITY'},503);
+  } catch {
+    return json({ok:false,configured:true,identity:false,storageList:false,code:'MEDIA_DIAGNOSTIC_IDENTITY'},503);
+  }
+  try {
+    await env.MEDIA_BUCKET.list({prefix:'passport-media/v1/',limit:1});
+  } catch {
+    return json({ok:false,configured:true,identity:true,storageList:false,code:'MEDIA_DIAGNOSTIC_STORAGE_LIST'},503);
+  }
+  return json({ok:true,configured:true,identity:true,storageList:true},200);
+}
+
 export async function handleMediaUpload(request:Request,env:MediaEnv,deps=productionDeps) {
   const url=new URL(request.url),origin=request.headers.get('origin');
   if(origin&&origin!==url.origin)return error('CROSS_ORIGIN',403,'Запрос доступен только из приложения');
